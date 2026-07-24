@@ -195,9 +195,10 @@ export function updateUploadSection() {
         voteTitleEl.textContent = t('vote_objective_title').replace('{title}', objTitle);
       }
       if (voteSubEl) {
-        // Data fi de votació real: ve de reptes_calendari.voting_end (fila del
-        // repte actiu), NO de objectives.end_date (que és un altre camp, no
-        // gestionat pel calendari). getActiveCalendar() ja fa aquest lookup.
+        // Data fi de votació real: ve d'objectives.cal_voting_end (Racionalització
+        // BD 2026-07 — abans vivia a reptes_calendari.voting_end, taula retirada),
+        // NO de objectives.end_date (que és un altre camp, no gestionat pel
+        // calendari). getActiveCalendar() ja fa aquest lookup.
         const cal = getActiveCalendar();
         const endDate = cal ? _formatDateEs(cal.votingEnd) : '';
         voteSubEl.textContent = endDate

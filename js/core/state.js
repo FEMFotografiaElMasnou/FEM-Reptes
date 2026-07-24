@@ -27,8 +27,10 @@ export const state = {
   // — la resta d'actius queden inerts (sense calendari/masters gestionables)
   // fins la Fase 3 (llista de reptes actius, no un de sol) i la Fase 4 (UI).
   currentObjective: null,
-  reptesCalendari: [],          // filas de reptes_calendari (programación + histórico;
-                                 // ja és 1:1 per objective_id — base de la Fase 2/3)
+  // reptesCalendari RETIRAT (Racionalització BD 2026-07): els camps de
+  // calendari (uploadStart/uploadEnd/votingStart/votingEnd/uploadMode/
+  // votingMode) ara viuen directament a cada element de `objectives`
+  // (vegeu data.js) — la taula `reptes_calendari` ha quedat absorbida.
   adminViewingAsParticipant: false,  // true when admin is browsing the participant view
   // ─── AUTOSAVE VOTING ─────────────────────────────────────────────
   // Map keyed by `${userId}__${objectiveId}` → { es_esborrany, submitted_at }

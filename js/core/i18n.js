@@ -45,6 +45,9 @@ export const TRANSLATIONS = {
     voting_closed: "Les votacions no estan obertes encara 🔒",
     voting_closed_label: 'Votació tancada',
     already_voted: "Ja has votat ✅",
+    // Cortineta de puntuació (visor de fotos a Resultats Repte)
+    score_curtain_expert: 'Votació Expert', score_curtain_socis: 'Vots Socis',
+    score_curtain_all: 'Tots els Vots',
     // Ranking
     current_ranking: 'Repte Actual', general_ranking: 'Ranking General',
     ranking_title: 'Ranking General', participations: 'participació(ns)',
@@ -399,6 +402,9 @@ export const TRANSLATIONS = {
     theme: 'Temática', composition: 'Composición',
     voting_closed: 'Las votaciones no están abiertas todavía 🔒',
     already_voted: 'Ya has votado ✅',
+    // Cortina de puntuación (visor de fotos en Resultados Reto)
+    score_curtain_expert: 'Votación Experto', score_curtain_socis: 'Votos Socios',
+    score_curtain_all: 'Todos los Votos',
     // Ranking
     current_ranking: 'Reto Actual', general_ranking: 'Ranking General',
     ranking_title: 'Ranking General', participations: 'participación(es)',

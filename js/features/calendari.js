@@ -27,10 +27,25 @@ import { renderRanking } from './ranking.js';
 
 // Fila de calendari d'un repte (per defecte, l'actiu). El nom és històric:
 // funciona per a QUALSEVOL objectiveId, no només per al repte "actiu" global.
+// RACIONALITZACIÓ BD 2026-07: abans llegia una taula a part (`reptes_calendari`,
+// ara retirada); els camps viuen directament a `state.objectives` (vegeu
+// data.js). Es manté la mateixa forma de retorn (uploadStart/uploadEnd/
+// votingStart/votingEnd/uploadMode/votingMode) perquè tematiques.js i la
+// resta de funcions d'aquest fitxer no s'hagin de tocar.
 export function getActiveCalendar(objectiveId) {
   const objId = objectiveId || getActiveObjectiveId();
   if (!objId) return null;
-  return (state.reptesCalendari || []).find(c => c.objectiveId === objId) || null;
+  const obj = state.objectives.find(o => o.id === objId);
+  if (!obj) return null;
+  return {
+    objectiveId: obj.id,
+    uploadStart: obj.uploadStart,
+    uploadEnd:   obj.uploadEnd,
+    votingStart: obj.votingStart,
+    votingEnd:   obj.votingEnd,
+    uploadMode:  obj.uploadMode,
+    votingMode:  obj.votingMode,
+  };
 }
 
 // 'YYYY-MM-DD' del dia D'AVUI EN HORA LOCAL del navegador (NO en UTC).
@@ -130,6 +145,10 @@ export function applyAllActiveCalendars() {
 // ── Canviar el mode (calendari/obert/tancat) d'una fase d'un repte ──
 // Cridat pel desplegable corresponent de cada targeta (tematiques.js).
 // Persisteix el mode a Supabase i recalcula l'estat efectiu a l'instant.
+// RACIONALITZACIÓ BD 2026-07: escriu directament a `objectives` (columnes
+// upload_mode/voting_mode) — abans feia un upsert a `reptes_calendari`,
+// taula retirada. Com que tot repte ja té sempre fila a `objectives`, ara
+// n'hi ha prou amb un `update`, no cal gestionar el cas "encara no existeix".
 export async function setPhaseMode(objectiveId, phase, mode) {
   if (!objectiveId || (phase !== 'upload' && phase !== 'voting')) return false;
   if (mode !== 'calendari' && mode !== 'obert' && mode !== 'tancat') return false;
@@ -142,26 +161,20 @@ export async function setPhaseMode(objectiveId, phase, mode) {
   // marge d'1 dia entre finestres (validat a updateCalendarDate) ja ho evita.
   if (phase === 'voting' && mode === 'obert') patch.upload_mode = 'tancat';
 
-  const { error } = await sb.from('reptes_calendari').upsert({
-    objective_id: objectiveId,
-    ...patch,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'objective_id' });
+  const { error } = await sb.from('objectives').update(patch).eq('id', objectiveId);
   if (error) {
     console.error('setPhaseMode error', error);
     showToast(t('calendar_save_error'), 'error');
     return false;
   }
 
-  let cal = getActiveCalendar(objectiveId);
-  if (!cal) {
-    cal = { id: '', objectiveId, uploadStart: '', uploadEnd: '', votingStart: '', votingEnd: '', uploadMode: 'calendari', votingMode: 'calendari' };
-    (state.reptesCalendari = state.reptesCalendari || []).push(cal);
-  }
-  if (phase === 'upload') cal.uploadMode = mode;
-  if (phase === 'voting') {
-    cal.votingMode = mode;
-    if (mode === 'obert') cal.uploadMode = 'tancat';
+  const obj = state.objectives.find(o => o.id === objectiveId);
+  if (obj) {
+    if (phase === 'upload') obj.uploadMode = mode;
+    if (phase === 'voting') {
+      obj.votingMode = mode;
+      if (mode === 'obert') obj.uploadMode = 'tancat';
+    }
   }
 
   applyPhaseModes(objectiveId);
@@ -172,16 +185,27 @@ export async function setPhaseMode(objectiveId, phase, mode) {
 
 // ── Editar una data d'un repte (<input type="date"> a la targeta) ──
 // field: 'uploadStart' | 'uploadEnd' | 'votingStart' | 'votingEnd'
+// RACIONALITZACIÓ BD 2026-07: escriu directament a `objectives` (columnes
+// cal_upload_start/end, cal_voting_start/end) — abans feia un upsert a
+// `reptes_calendari`. Com que la fila sempre existeix a `objectives`, només
+// cal actualitzar la columna concreta que ha canviat.
+const DATE_FIELD_TO_COLUMN = {
+  uploadStart: 'cal_upload_start',
+  uploadEnd:   'cal_upload_end',
+  votingStart: 'cal_voting_start',
+  votingEnd:   'cal_voting_end',
+};
+
 export async function updateCalendarDate(objectiveId, field, value) {
-  if (!objectiveId) return false;
-  const existing = getActiveCalendar(objectiveId);
+  if (!objectiveId || !DATE_FIELD_TO_COLUMN[field]) return false;
+  const obj = state.objectives.find(o => o.id === objectiveId);
+  if (!obj) return false;
+
   const draft = {
-    uploadStart: existing ? existing.uploadStart : '',
-    uploadEnd:   existing ? existing.uploadEnd   : '',
-    votingStart: existing ? existing.votingStart : '',
-    votingEnd:   existing ? existing.votingEnd   : '',
-    uploadMode:  existing ? existing.uploadMode  : 'calendari',
-    votingMode:  existing ? existing.votingMode  : 'calendari',
+    uploadStart: obj.uploadStart || '',
+    uploadEnd:   obj.uploadEnd   || '',
+    votingStart: obj.votingStart || '',
+    votingEnd:   obj.votingEnd   || '',
   };
   draft[field] = value || '';
 
@@ -206,31 +230,19 @@ export async function updateCalendarDate(objectiveId, field, value) {
     }
   }
 
-  const { error } = await sb.from('reptes_calendari').upsert({
-    objective_id: objectiveId,
-    upload_start: draft.uploadStart || null,
-    upload_end:   draft.uploadEnd   || null,
-    voting_start: draft.votingStart || null,
-    voting_end:   draft.votingEnd   || null,
-    upload_mode:  draft.uploadMode  || 'calendari',
-    voting_mode:  draft.votingMode  || 'calendari',
-    updated_at:   new Date().toISOString(),
-  }, { onConflict: 'objective_id' });
+  const { error } = await sb.from('objectives')
+    .update({ [DATE_FIELD_TO_COLUMN[field]]: draft[field] || null })
+    .eq('id', objectiveId);
   if (error) {
     console.error('updateCalendarDate error', error);
     showToast(t('calendar_save_error'), 'error');
     return false;
   }
 
-  let cal = getActiveCalendar(objectiveId);
-  if (!cal) {
-    cal = { id: '', objectiveId, uploadMode: 'calendari', votingMode: 'calendari' };
-    (state.reptesCalendari = state.reptesCalendari || []).push(cal);
-  }
-  cal.uploadStart = draft.uploadStart;
-  cal.uploadEnd   = draft.uploadEnd;
-  cal.votingStart = draft.votingStart;
-  cal.votingEnd   = draft.votingEnd;
+  obj.uploadStart = draft.uploadStart;
+  obj.uploadEnd   = draft.uploadEnd;
+  obj.votingStart = draft.votingStart;
+  obj.votingEnd   = draft.votingEnd;
 
   applyPhaseModes(objectiveId);
   if (typeof window.renderObjectivesList === 'function') window.renderObjectivesList();
@@ -247,7 +259,7 @@ export async function updateCalendarDate(objectiveId, field, value) {
 // Es deixa la funció per si calgués un resum de només lectura en un altre
 // lloc (p. ex. filtres de galeria).
 export function getCalendariDatesHtml(objectiveId) {
-  const cal = (state.reptesCalendari || []).find(c => c.objectiveId === objectiveId);
+  const cal = getActiveCalendar(objectiveId);
   if (!cal || !(cal.uploadStart || cal.uploadEnd || cal.votingStart || cal.votingEnd)) return '';
 
   // 'YYYY-MM-DD' → 'DD-MM-YY' (només per mostrar; internament tot segueix en ISO)

@@ -727,6 +727,10 @@
 
   <!-- Counter -->
   <div class="lightbox-counter" id="lightbox-counter" style="display:none;">1 / 10</div>
+
+  <!-- Disparador ⭐ i cortineta de puntuació (només a Resultats Repte, si hi ha vot d'expert) -->
+  <button type="button" class="score-trigger" id="lightbox-score-trigger" style="display:none;" onclick="event.stopPropagation(); toggleScoreCurtain()" title="Puntuació i posició" aria-label="Puntuació i posició">★</button>
+  <div class="score-curtain" id="lightbox-score-curtain" onclick="event.stopPropagation();"></div>
 </div>
 
 <!-- GLOBAL LOADING OVERLAY -->

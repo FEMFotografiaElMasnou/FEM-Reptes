@@ -5,10 +5,81 @@ import { state, actingAsAdmin } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { showToast, showLoader, hideLoader } from './toast.js';
 import { getActiveAllPhotos, getParticipantNumber } from '../core/data.js';
+import { getPhotoResultsBreakdown, formatScore, formatPosition } from '../features/ranking.js';
 
 let _fullscreenFileName = 'foto.jpg';
 let _lightboxPhotos = [];      // Array of {url, fileName} for navigation
 let _lightboxCurrentIndex = 0; // Current photo index
+
+// ═══════════════════════════════════
+// CORTINETA DE PUNTUACIÓ (només Resultats Repte, si hi ha vot d'expert)
+// ═══════════════════════════════════
+let _scoreCurtainOpen = false;
+let _currentBreakdown = null; // { objectiveId, blocks: [...] } o null
+
+const _BLOCK_LABEL_KEYS = {
+  expert: 'score_curtain_expert',
+  socis:  'score_curtain_socis',
+  all:    'score_curtain_all',
+};
+
+function _posColor(position) {
+  if (position === 1) return '#f5c842';
+  if (position === 2) return '#b0b8c8';
+  if (position === 3) return '#c87941';
+  return 'var(--text-muted)';
+}
+
+function _miniStarsHtml(score) {
+  const pct = Math.max(0, Math.min(100, Math.round((score / 5) * 100)));
+  return `<span class="mini-stars"><span class="empty">★★★★★</span><span class="filled" style="width:${pct}%">★★★★★</span></span>`;
+}
+
+function _scoreCurtainHtml(breakdown) {
+  const blocks = breakdown.blocks.map(b => `
+    <div class="score-block">
+      <div class="score-block-head">
+        <span class="score-block-name">${_escapeHtml(t(_BLOCK_LABEL_KEYS[b.key]))}</span>
+        <span class="score-block-pos" style="color:${_posColor(b.position)}">${formatPosition(b.position)}</span>
+        <span class="score-block-total">${formatScore(b.final)}</span>
+      </div>
+      <div class="score-crit-row"><span class="score-crit-label">${t('creativity')}</span>${_miniStarsHtml(b.creativity)}<span class="score-crit-val">${formatScore(b.creativity)}</span></div>
+      <div class="score-crit-row"><span class="score-crit-label">${t('composition')}</span>${_miniStarsHtml(b.composition)}<span class="score-crit-val">${formatScore(b.composition)}</span></div>
+      <div class="score-crit-row"><span class="score-crit-label">${t('theme')}</span>${_miniStarsHtml(b.theme)}<span class="score-crit-val">${formatScore(b.theme)}</span></div>
+    </div>
+  `).join('');
+  return `<div class="score-blocks">${blocks}</div>`;
+}
+
+// Actualitza el context de la cortineta a partir del "photo" actiu al visor.
+// Només es mostra el disparador ⭐ si la foto ve de Resultats Repte
+// (resultsMode:true, vegeu ranking.js) i el seu repte té vot d'expert.
+function _updateScoreContext(photoObj) {
+  _closeScoreCurtain();
+  const trigger = document.getElementById('lightbox-score-trigger');
+  const photoId = photoObj && photoObj.resultsMode ? photoObj.id : null;
+  _currentBreakdown = photoId ? getPhotoResultsBreakdown(photoId) : null;
+  if (trigger) trigger.style.display = _currentBreakdown ? 'flex' : 'none';
+}
+
+function _closeScoreCurtain() {
+  _scoreCurtainOpen = false;
+  const panel = document.getElementById('lightbox-score-curtain');
+  if (panel) panel.classList.remove('open');
+}
+
+export function toggleScoreCurtain() {
+  if (!_currentBreakdown) return;
+  const panel = document.getElementById('lightbox-score-curtain');
+  if (!panel) return;
+  _scoreCurtainOpen = !_scoreCurtainOpen;
+  if (_scoreCurtainOpen) {
+    panel.innerHTML = _scoreCurtainHtml(_currentBreakdown);
+    panel.classList.add('open');
+  } else {
+    panel.classList.remove('open');
+  }
+}
 
 // Busca el títol/descripció de la foto a partir de la seva URL (evita haver de
 // passar el text per tots els onclick que obren el visor).
@@ -49,6 +120,7 @@ export function openFullscreen(url, fileName, photosList, startIndex) {
   _fullscreenFileName = fileName || 'foto.jpg';
   const _startPhoto = (photosList && photosList.length) ? photosList[startIndex || 0] : null;
   _showCaption(url, _startPhoto && _startPhoto.author);
+  _updateScoreContext(_startPhoto);
 
   // Setup navigation if photosList provided
   if (photosList && photosList.length > 1) {
@@ -97,6 +169,7 @@ export function navigateLightbox(direction) {
   img.src = photo.url;
   _fullscreenFileName = photo.fileName || 'foto.jpg';
   _showCaption(photo.url, photo.author);
+  _updateScoreContext(photo);
 
   // Resetear zoom al cambiar de foto
   resetZoom();
@@ -134,6 +207,10 @@ export function closeFullscreen() {
   _lightboxCurrentIndex = 0;
   const cap = document.getElementById('fullscreen-caption');
   if (cap) { cap.textContent = ''; cap.style.display = 'none'; }
+  _closeScoreCurtain();
+  _currentBreakdown = null;
+  const trigger = document.getElementById('lightbox-score-trigger');
+  if (trigger) trigger.style.display = 'none';
 }
 
 // Wrapper para el botón de descarga del lightbox (antes el onclick usaba la
@@ -411,3 +488,4 @@ window.handleLightboxClick = handleLightboxClick;
 window.downloadPhoto = downloadPhoto;
 window.downloadAllPhotos = downloadAllPhotos;
 window.downloadCurrentFullscreen = downloadCurrentFullscreen;
+window.toggleScoreCurtain = toggleScoreCurtain;

@@ -52,7 +52,12 @@ export async function loadAllData() {
     // names_revealed afegit a la Fase 2 (multi-repte): vegeu FEM_reptes.md.
     // uploads_enabled/voting_enabled ja existien a la taula però eren lletra
     // morta fins la Fase 2 — ara SÍ que en depèn el mirall de state.settings.
-    sb.from('objectives').select('id,name,description,status,uploads_enabled,voting_enabled,names_revealed,start_date,end_date,created_by'),
+    // cal_upload_start/end, cal_voting_start/end, upload_mode, voting_mode:
+    // absorbits des de la taula `reptes_calendari` (eliminada) — Racionalització
+    // BD 2026-07, vegeu Diagnostic_objectives_reptes_calendari.md. Abans calia
+    // una segona consulta a part (`reptes_calendari`); ara tot un repte viu en
+    // una sola fila d'`objectives`.
+    sb.from('objectives').select('id,name,description,status,uploads_enabled,voting_enabled,names_revealed,start_date,end_date,created_by,cal_upload_start,cal_upload_end,cal_voting_start,cal_voting_end,upload_mode,voting_mode'),
     sb.from('photo_submissions').select('id,user_id,objective_id,file_name,file_url,original_url,file_size,published,revealed,submitted_at,caption'),
     sb.from('votes').select('id,user_id,photo_id,objective_id,creativity,theme,composition'),
     sb.from('app_settings').select('key,value'),
@@ -97,6 +102,11 @@ export async function loadAllData() {
   }));
 
   // ── Objectives
+  // uploadStart/uploadEnd/votingStart/votingEnd/uploadMode/votingMode:
+  // absorbits des de `reptes_calendari` (Racionalització BD 2026-07). Es
+  // mantenen aquests noms de camp a `state` (no els de la columna, cal_...)
+  // perquè calendari.js/tematiques.js no s'hagin de tocar — mateixa forma
+  // que abans donava `getActiveCalendar()`.
   state.objectives = (objectivesRaw || []).map(o => ({
     id:              String(o.id || ''),
     title:           o.name || '',
@@ -108,6 +118,12 @@ export async function loadAllData() {
     start_date:      o.start_date || '',
     end_date:        o.end_date || '',
     created_by:      o.created_by || '',
+    uploadStart:     o.cal_upload_start || '',
+    uploadEnd:       o.cal_upload_end   || '',
+    votingStart:     o.cal_voting_start || '',
+    votingEnd:       o.cal_voting_end   || '',
+    uploadMode:      o.upload_mode || 'calendari',
+    votingMode:      o.voting_mode || 'calendari',
   }));
 
   // ── Photos
@@ -201,22 +217,11 @@ export async function loadAllData() {
   state.settings.voting_enabled  = state.currentObjective ? !!state.currentObjective.voting_enabled  : false;
   state.settings.namesRevealed   = state.currentObjective ? !!state.currentObjective.names_revealed  : false;
 
-  // ── Calendari de reptes (taula nova; si encara no existeix, no trenca la resta)
-  // FASE 4/5 (pla multi-repte): upload_mode/voting_mode substitueixen
-  // l'antic automation_enabled (vegeu sql/reptes_calendari_fase4.sql i
-  // calendari.js). No es llegeix més automation_enabled.
-  const calRes = await sb.from('reptes_calendari')
-    .select('id,objective_id,upload_start,upload_end,voting_start,voting_end,upload_mode,voting_mode');
-  state.reptesCalendari = calRes.error ? [] : (calRes.data || []).map(c => ({
-    id:          String(c.id || ''),
-    objectiveId: String(c.objective_id || ''),
-    uploadStart: c.upload_start || '',
-    uploadEnd:   c.upload_end || '',
-    votingStart: c.voting_start || '',
-    votingEnd:   c.voting_end || '',
-    uploadMode:  c.upload_mode || 'calendari',
-    votingMode:  c.voting_mode || 'calendari',
-  }));
+  // Calendari de reptes: RACIONALITZACIÓ BD 2026-07 — `reptes_calendari` (taula
+  // a part) ha quedat absorbida dins `objectives` (columnes cal_upload_start/
+  // end, cal_voting_start/end, upload_mode, voting_mode). Ja no cal una
+  // segona consulta aquí: state.objectives ja porta aquests camps (vegeu
+  // mapeig més amunt). `state.reptesCalendari` es retira.
 }
 
 // ═══════════════════════════════════
@@ -255,6 +260,14 @@ export async function saveObjectives() {
     start_date:      o.start_date || null,
     end_date:        o.end_date || null,
     created_by:      o.created_by || (state.currentUser ? state.currentUser.id : null),
+    // Racionalització BD 2026-07: camps de calendari absorbits d'aquí (abans
+    // vivien a `reptes_calendari`, taula retirada).
+    cal_upload_start: o.uploadStart || null,
+    cal_upload_end:   o.uploadEnd   || null,
+    cal_voting_start: o.votingStart || null,
+    cal_voting_end:   o.votingEnd   || null,
+    upload_mode:      o.uploadMode  || 'calendari',
+    voting_mode:      o.votingMode  || 'calendari',
   }));
   const { error } = await sb.from('objectives').upsert(rows, { onConflict: 'id' });
   if (error) console.error('saveObjectives error', error);

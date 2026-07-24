@@ -1228,6 +1228,87 @@ body::before {
   white-space: nowrap;
 }
 
+/* ════════════════════════════════
+   CORTINETA DE PUNTUACIÓ (Resultats Repte)
+   Disparador ⭐ + persiana semitransparent amb els blocs
+   Votació Expert / Vots Socis / Tots els Vots.
+════════════════════════════════ */
+.score-trigger {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(245,166,35,0.16);
+  border: 1px solid rgba(245,166,35,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: #f5c842;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s;
+  z-index: 16;
+}
+.score-trigger:hover { background: rgba(245,166,35,0.28); }
+
+.score-curtain {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 80%;
+  background: rgba(7,20,36,0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(36,71,126,0.6);
+  border-radius: 20px 20px 0 0;
+  transform: translateY(115%);
+  transition: transform 0.35s cubic-bezier(.2,.8,.2,1);
+  padding: 14px 16px;
+  overflow-y: auto;
+  z-index: 15;
+}
+.score-curtain.open { transform: translateY(0); }
+
+.score-blocks { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 641px) {
+  .score-blocks { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+}
+
+.score-block {
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(36,71,126,0.5);
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.score-block-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.score-block-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+  font-weight: 500;
+}
+.score-block-pos { font-family: var(--font-cond); font-size: 14px; font-weight: 700; flex-shrink: 0; }
+.score-block-total { font-family: var(--font-cond); font-size: 15px; font-weight: 700; color: var(--accent2); flex-shrink: 0; width: 42px; text-align: right; }
+
+.score-crit-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+.score-crit-label { width: 52px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-crit-val { margin-left: auto; color: var(--text); }
+
+.mini-stars { position: relative; display: inline-block; font-size: 10px; letter-spacing: 1px; line-height: 1; }
+.mini-stars .empty { color: rgba(79,143,255,0.2); }
+.mini-stars .filled { position: absolute; top: 0; left: 0; overflow: hidden; white-space: nowrap; color: var(--accent2); }
+
 @media (max-width: 640px) {
   .lightbox-nav-btn {
     width: 44px;

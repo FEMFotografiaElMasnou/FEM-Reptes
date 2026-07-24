@@ -4,6 +4,7 @@
 import { state, actingAsAdmin } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { getActivePublishedPhotos, getDisplayName } from '../core/data.js';
+import { openFullscreen } from '../ui/lightbox.js';
 
 // ── Taula de punts per posició al rànquing global ───────────────
 const POSITION_POINTS = [25, 18, 15, 12, 10, 8, 7, 6, 5, 4];
@@ -49,8 +50,39 @@ export function formatScore(score) {
   return score.toFixed(2).replace('.', ',');
 }
 
-export function getPhotoScoreBreakdown(photoId) {
+// Set de userIds que han ENVIAT (es_esborrany=false) en aquest repte, filtrat
+// opcionalment per l'origen del vot:
+//   'all'    → tothom que ha enviat (comportament original, sense filtrar)
+//   'expert' → només usuaris amb role === 'expert'
+//   'socis'  → tothom que NO és expert (participants i admins, és a dir "socis")
+function _submittedUserIdsForScope(objectiveId, scope) {
+  const ids = new Set();
+  for (const [key, val] of Object.entries(state.submittedVoting || {})) {
+    if (!val || val.es_esborrany !== false) continue;
+    const sepIdx = key.lastIndexOf('__');
+    if (sepIdx === -1) continue;
+    const uid = key.slice(0, sepIdx);
+    const oid = key.slice(sepIdx + 2);
+    if (oid !== String(objectiveId)) continue;
+    if (scope === 'all') { ids.add(uid); continue; }
+    const u = state.users.find(x => x.id === uid);
+    const isExpert = !!(u && u.role === 'expert');
+    if (scope === 'expert' && isExpert) ids.add(uid);
+    if (scope === 'socis' && !isExpert) ids.add(uid);
+  }
+  return ids;
+}
+
+// Hi ha algun expert que hagi enviat vot per aquest repte? Determina si té
+// sentit mostrar el desglossament "Votació Expert / Vots Socis / Tots els Vots".
+export function objectiveHasExpertVoting(objectiveId) {
+  return _submittedUserIdsForScope(objectiveId, 'expert').size > 0;
+}
+
+export function getPhotoScoreBreakdown(photoId, scope = 'all') {
   // Desglossament de la puntuació d'una foto: mitja per criteri + nota final.
+  // `scope` permet restringir el càlcul a un subconjunt de votants (vegeu
+  // _submittedUserIdsForScope): 'all' (per defecte), 'expert' o 'socis'.
   const empty = { creativity: 0, theme: 0, composition: 0, final: 0 };
 
   // 1) Trobar la foto i el seu objectiveId (publicada o no: el repte actiu pot
@@ -60,16 +92,9 @@ export function getPhotoScoreBreakdown(photoId) {
   if (!photo || !photo.objectiveId) return empty;
   const objectiveId = photo.objectiveId;
 
-  // 2) Set de userIds que han ENVIAT (es_esborrany=false) en aquest repte.
-  const submittedUserIds = new Set();
-  for (const [key, val] of Object.entries(state.submittedVoting || {})) {
-    if (!val || val.es_esborrany !== false) continue;
-    const sepIdx = key.lastIndexOf('__');
-    if (sepIdx === -1) continue;
-    const uid = key.slice(0, sepIdx);
-    const oid = key.slice(sepIdx + 2);
-    if (oid === String(objectiveId)) submittedUserIds.add(uid);
-  }
+  // 2) Set de userIds que han ENVIAT (es_esborrany=false) en aquest repte,
+  //    restringit a l'scope demanat.
+  const submittedUserIds = _submittedUserIdsForScope(objectiveId, scope);
 
   const totalVotants = submittedUserIds.size;
   if (totalVotants === 0) return empty;
@@ -100,19 +125,83 @@ export function getPhotoScore(photoId) {
   return getPhotoScoreBreakdown(photoId).final;
 }
 
-// Rànquing detallat d'un repte concret (per id), ordenat per nota final.
+// Fotos que compten per a un repte concret:
 //   · repte finalitzat → només les fotos que van concursar (publicades)
 //   · repte no finalitzat (actual/inactiu, només visible per l'admin) → totes les
 //     fotos pujades, encara que no estiguin publicades, per veure'n l'estat.
-export function computeRankingForObjective(objId) {
+function _photoPoolForObjective(objId) {
   const obj = state.objectives.find(o => o.id === objId);
   const isFinished = !!(obj && obj.status === 'finished');
-  const pool = isFinished
+  return isFinished
     ? state.publishedPhotos.filter(p => p.objectiveId === objId)
     : [...state.publishedPhotos, ...state.photos].filter(p => p.objectiveId === objId);
-  return pool
+}
+
+// Rànquing detallat d'un repte concret (per id), ordenat per nota final.
+export function computeRankingForObjective(objId) {
+  return _photoPoolForObjective(objId)
     .map(photo => ({ photo, ...getPhotoScoreBreakdown(photo.id) }))
     .sort((a, b) => b.final - a.final);
+}
+
+// Rànquing d'un repte restringit a un scope de votants ('expert' | 'socis' | 'all'),
+// amb posició assignada (1-indexada, empats hereten la mateixa posició).
+function _rankingForObjectiveScoped(objId, scope) {
+  const scored = _photoPoolForObjective(objId)
+    .map(photo => ({ photo, ...getPhotoScoreBreakdown(photo.id, scope) }))
+    .sort((a, b) => b.final - a.final);
+
+  let lastPosition = 0;
+  let previousScore = null;
+  scored.forEach(item => {
+    item.position = (previousScore !== null && item.final === previousScore)
+      ? lastPosition
+      : lastPosition + 1;
+    lastPosition = item.position;
+    previousScore = item.final;
+  });
+  return scored;
+}
+
+// Ordinal català curt per a posicions de rànquing (1r, 2n, 3r, 4t, 5è...).
+export function formatPosition(position) {
+  if (!position || position < 1) return '—';
+  if (position === 1) return '1r';
+  if (position === 2) return '2n';
+  if (position === 3) return '3r';
+  if (position === 4) return '4t';
+  return position + 'è';
+}
+
+// Desglossament complet per a la cortineta de puntuació del visor de fotos:
+// posició + nota (total i per criteri) en els tres blocs Expert/Socis/Tots.
+// Retorna null si el repte de la foto no té cap vot d'expert (en aquest cas
+// no s'ha de mostrar la cortineta ni el seu disparador).
+export function getPhotoResultsBreakdown(photoId) {
+  const photo = state.publishedPhotos.find(p => p.id === photoId)
+             || state.photos.find(p => p.id === photoId);
+  if (!photo || !photo.objectiveId) return null;
+  const objectiveId = photo.objectiveId;
+  if (!objectiveHasExpertVoting(objectiveId)) return null;
+
+  const scopes = [
+    { key: 'expert', labelKey: 'score_curtain_expert' },
+    { key: 'socis',  labelKey: 'score_curtain_socis' },
+    { key: 'all',    labelKey: 'score_curtain_all' },
+  ];
+  const blocks = scopes.map(({ key, labelKey }) => {
+    const ranked = _rankingForObjectiveScoped(objectiveId, key);
+    const entry = ranked.find(r => r.photo.id === photoId);
+    return {
+      key, labelKey,
+      position:    entry ? entry.position    : null,
+      creativity:  entry ? entry.creativity  : 0,
+      theme:       entry ? entry.theme       : 0,
+      composition: entry ? entry.composition : 0,
+      final:       entry ? entry.final       : 0,
+    };
+  });
+  return { objectiveId, blocks };
 }
 
 // Nom real de l'autor (els reptes finalitzats no són anònims; com a la galeria).
@@ -132,10 +221,20 @@ export function renderResultatsRepte(objId, listId) {
     return;
   }
   const rankNums = ['gold', 'silver', 'bronze'];
+
+  // Llista per al visor a pantalla completa. `resultsMode:true` + `id` és el
+  // que activa (a lightbox.js) el disparador ⭐ i la cortineta de puntuació —
+  // per això NOMÉS aquesta pantalla (Resultats Repte) construeix la llista així;
+  // la Galeria fa servir el mateix openFullscreen() però sense aquests camps.
+  window._resultatsPhotosList = ranked.map(({ photo }) => ({
+    url: photo.url, fileName: photo.fileName, author: _authorName(photo.userId),
+    id: photo.id, resultsMode: true,
+  }));
+
   el.innerHTML = ranked.map(({ photo, creativity, theme, composition, final }, idx) => `
     <div class="rank-item rank-item-detailed">
       <div class="rank-num ${rankNums[idx] || ''}">${idx + 1}</div>
-      <img class="rank-thumb" src="${photo.url}" alt="">
+      <img class="rank-thumb" src="${photo.url}" alt="" style="cursor:pointer;" onclick="openResultatsLightbox(${idx})">
       <div class="rank-info">
         <div class="rank-name">${_authorName(photo.userId)}</div>
         <div class="rank-criteria">
@@ -148,6 +247,14 @@ export function renderResultatsRepte(objId, listId) {
     </div>
   `).join('');
 }
+
+// Obre el visor a pantalla completa des de la pantalla Resultats Repte.
+export function openResultatsLightbox(index) {
+  const photos = window._resultatsPhotosList || [];
+  if (photos.length === 0) return;
+  openFullscreen(photos[index].url, photos[index].fileName, photos, index);
+}
+window.openResultatsLightbox = openResultatsLightbox;
 
 export function computeCurrentRanking() {
   // Solo fotos de la temática activa
