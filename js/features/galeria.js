@@ -1,7 +1,7 @@
 // ═══════════════════════════════════
 // GALERIA HISTÒRICA — fotos de reptes finalitzats, amb filtres repte/autor
 // ═══════════════════════════════════
-// Mostra fotos de temàtiques amb status 'finished'. L'admin (pel ROL real, encara
+// Mostra fotos de reptes amb status 'finished'. L'admin (pel ROL real, encara
 // que estigui "veient com a participant") veu a més el repte ACTUAL. Els socis
 // només veuen els finalitzats. El visor a pantalla completa (lightbox) es reutilitza
 // tal qual; aquí construïm la llista i el carrusel de la card.

@@ -88,7 +88,55 @@ módulos por pantalla y por función.
 - **Integraciones de Enric (YA aplicadas)**: `Enric_Integracio-Reptes-Resultats.md` (persistencia de sesión, v0.1.4) y `enric_Integracio-Botons-Reptes.md` (App Resultats embebida, v0.1.8). La App Resultats vive en la **raíz** `https://fem-resultats.vercel.app/` (antes en Netlify; movida a Vercel el 2026-07-07) y lee `?role=&view=&embedded=true`.
 - **Decisión de arquitectura**: módulos ES por pantalla + puente `window.*` para `onclick`. Al cerrar la fase, actualizar ADR-001.
 
+## Estat actual de la BD — Racionalització `objectives`/`reptes_calendari` (Enric, 2026-07-24)
+
+> **Llegir abans de tocar res relacionat amb reptes/calendari.** Aquesta secció
+> és la referència viva de l'esquema real; el pla de sota ("Pla — Revisió de
+> l'admin...") es manté intacte com a **historial de com s'hi va arribar**,
+> però les seves mencions a `reptes_calendari` com a taula activa ja **no**
+> reflecteixen l'estat actual — vegeu la nota que hi ha just a sota del títol
+> del pla. Diagnòstic complet i registre pas a pas de la migració (aplicada a
+> Normal i Test, verificada amb un repte real "Contrallums"):
+> `Diagnostic_objectives_reptes_calendari.md` (fora d'aquesta carpeta, la té Enric).
+
+**`objectives` és ara l'única font de veritat d'un repte**, calendari inclòs:
+
+| Columna | Significat |
+|---|---|
+| `id`, `name`, `description`, `status`, `created_by` | Identitat del repte (`status`: `active`/`finished`/`inactive`) |
+| `start_date`, `end_date` | Data de creació / de finalització del repte (**no** és calendari de pujada-votació) |
+| `uploads_enabled`, `voting_enabled`, `names_revealed` | Estat efectiu d'avui (el que llegeix la resta de l'app) |
+| `cal_upload_start`, `cal_upload_end`, `cal_voting_start`, `cal_voting_end` | Finestres de pujada/votació (abans a `reptes_calendari`) |
+| `upload_mode`, `voting_mode` | `calendari` / `obert` / `tancat` per fase (abans a `reptes_calendari`) |
+
+`reptes_calendari` **existeix encara a la BD però ja no rep cap lectura ni escriptura** —
+ni el frontend (`js/core/data.js`, `js/features/calendari.js`) ni el cron
+(`fem_apply_calendar()`, `pg_cron`, 00:05 UTC) hi toquen res. Es manté només
+per un període d'observació abans d'eliminar-la (ADR-015: eliminar-la sempre
+serà una acció manual a l'editor SQL de Supabase, mai des del frontend).
+`getActiveCalendar(objectiveId)` (`calendari.js`) segueix sent el punt d'accés
+correcte als camps de calendari d'un repte — internament ja llegeix `objectives`,
+no cal que cap altra part de l'app ho sàpiga.
+
+**Pendent, sense pressa** (no afecta el funcionament, és neteja): eliminar
+`reptes_calendari` i renombrar `objectives` → `reptes` (alinearia el nom amb
+el vocabulari que ja fa servir tota la resta de l'app). Si es fa el renombrat,
+cal tocar també `FEM-Resultats/src/App.jsx` (2 línies, `.from('objectives')` → `.from('reptes')`)
+— l'app de Resultats només hi llegeix `id`/`name`/`status`, no toca res de calendari.
+
+SQL de referència de tot el que s'ha aplicat: `sql/2026-07-24_racionalitzacio_objectives.sql`.
+
+---
+
 ## Pla — Revisió de l'admin i suport multi-repte (en curs, 2026-07-17)
+
+> **Nota (2026-07-24):** aquest pla es manté intacte com a historial — és el
+> que va crear `reptes_calendari` i el que en va justificar cada columna. Per
+> a l'esquema **real i actual**, vegeu la secció de sobre
+> ("Estat actual de la BD"): `reptes_calendari` ha quedat absorbida dins
+> `objectives` i les mencions de sota que la donen per taula activa (p. ex. el
+> paràgraf "La taula `reptes_calendari` és l'excepció..." just aquí baix, o
+> `sql/reptes_calendari_fase4.sql` a la Fase 5) ja no apliquen literalment.
 
 > Origen: revisió de l'apartat admin demanada per Pablo (Panell de Control i Reptes).
 > Abans de tocar res d'aquest pla, **llegir aquesta secció sencera i el codi implicat**

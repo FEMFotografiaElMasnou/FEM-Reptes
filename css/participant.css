@@ -30,8 +30,86 @@
   line-height: 1.5;
 }
 
+/* Rang de dates de pujada/votació (objectives.cal_upload_*/cal_voting_*),
+   sota el nom+descripció del repte. Amagades per JS (classe .hidden) quan
+   falta alguna de les dues dates d'un rang. */
+.objective-cal-dates { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.objective-cal-line {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--text-muted);
+}
+
+/* Imatge de fons de la capçalera (objectives.cover_image_url, opcional —
+   2026-07-24). Sense imatge, .objective-header queda tal com estava abans
+   (fons pla, sense aquesta classe). El degradat s'aplica des del JS
+   (participant.js) juntament amb la imatge, en un sol background-image, per
+   garantir que el text quedi llegible sigui quina sigui la foto pujada.
+   Relació recomanada de la imatge en origen: 3:1 (p. ex. 1200×400 px),
+   perquè els socis la pugin ja retallada — aquí només s'ajusta amb
+   background-size:cover per si la relació no és exacta. */
+.objective-header--has-cover {
+  border-bottom: none;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  aspect-ratio: 3 / 1;
+  min-height: 120px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.objective-header--has-cover .objective-title { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.55); }
+.objective-header--has-cover .objective-desc  { color: rgba(255,255,255,.92); text-shadow: 0 1px 3px rgba(0,0,0,.55); }
+.objective-header--has-cover .objective-cal-line { color: rgba(255,255,255,.92); text-shadow: 0 1px 3px rgba(0,0,0,.55); }
+
+@media (max-width: 700px) {
+  .objective-header--has-cover { aspect-ratio: 2.2 / 1; }
+}
+
 .objective-photo-header { margin-bottom: 16px; }
 .objective-photo-title { font-size: 20px; }
+
+/* ── Igualar l'alçada amb Galeria (mateixa fila del hero-grid, 2026-07-24) ──
+   .hero-grid ja té align-items:stretch, però una targeta de bloc normal no
+   omple aquesta alçada extra amb el seu propi contingut: es queda amb
+   l'alçada natural i deixa la resta en blanc sota seu (per això la targeta
+   de Repte quedava més baixa que la de Galeria). La convertim en un
+   contenidor flex en columna perquè l'espai guanyat s'aprofiti — la zona de
+   "La meva foto" creix i queda més folgada — en lloc de quedar buit al peu.
+   Escopat per id perquè no afecti cap altra targeta/pantalla de l'app. */
+#card-objective-photo.objective-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+#card-objective-photo .objective-photo-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+#card-objective-photo #participant-mode-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+#card-objective-photo #upload-section,
+#card-objective-photo #upload-preview-section,
+#card-objective-photo #upload-done-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+#card-objective-photo .upload-zone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 
 /* Camp de títol/descripció de la foto — una línia, mateixa amplada que la foto
    (no ha de competir en pes visual amb la imatge, que és el contingut principal) */

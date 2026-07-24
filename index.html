@@ -276,7 +276,7 @@
       </div>
     </div>
 
-    <!-- TAB: TEMÀTIQUES -->
+    <!-- TAB: REPTES -->
     <div id="admin-tab-objectives" class="tab-content">
       <div class="card">
         <div class="card-header">
@@ -284,7 +284,7 @@
           <button type="button" class="btn btn-primary btn-sm" onclick="openObjectiveModal()" data-i18n="new_objective_btn">+ Nou Repte</button>
         </div>
         <div id="objectives-list">
-          <div class="empty-state"><div class="empty-icon">🎯</div><p data-i18n="no_objectives">No hi ha temàtiques creades.</p></div>
+          <div class="empty-state"><div class="empty-icon">🎯</div><p data-i18n="no_objectives">No hi ha reptes creats.</p></div>
         </div>
       </div>
     </div>
@@ -387,11 +387,20 @@
              que abans es facin les Fases 2/3 (BD + nucli JS per repte). -->
         <div class="card objective-card" id="card-objective-photo">
 
-          <!-- Capçalera del repte — sense subdivisions, només nom + text informatiu
-               (les dates ja hi surten dins el propi text; no cal repetir-les). -->
-          <div class="objective-header">
+          <!-- Capçalera del repte — nom + text informatiu + rang de dates de
+               pujada/votació (llegides de objectives.cal_upload_*/cal_voting_*
+               via getActiveCalendar()). Pot mostrar una imatge de fons pròpia
+               del repte (objectives.cover_image_url, pujada per l'admin) —
+               el JS (participant.js, refreshParticipantDashboard()) hi afegeix
+               la classe .objective-header--has-cover i el background-image
+               quan n'hi ha una. -->
+          <div class="objective-header" id="objective-header">
             <div class="objective-title"><span data-i18n="home_repte_label">Repte:</span> <span id="participant-objective-name">—</span></div>
             <div id="participant-objective-desc" class="objective-desc"></div>
+            <div class="objective-cal-dates">
+              <div id="participant-objective-cal-upload" class="objective-cal-line hidden"></div>
+              <div id="participant-objective-cal-voting" class="objective-cal-line hidden"></div>
+            </div>
           </div>
 
           <!-- La meva foto d'aquest repte -->
@@ -622,6 +631,18 @@
     <div class="form-group">
       <label data-i18n="obj_desc_label">Descripció</label>
       <textarea id="obj-desc" rows="3" data-i18n-placeholder="obj_desc_placeholder" placeholder="Ex: Fotos urbanístiques de la ciutat..." style="resize:vertical;"></textarea>
+    </div>
+    <!-- Imatge de fons de la capçalera del repte (box "Repte / Foto pujada",
+         costat participant) — opcional. Es puja a Cloudinary en seleccionar
+         el fitxer (handleObjectiveCoverSelect, tematiques.js) i la URL
+         resultant queda a #obj-cover-url; saveObjective() la llegeix d'allà. -->
+    <div class="form-group">
+      <label data-i18n="obj_cover_label">Imatge de fons (opcional)</label>
+      <div class="obj-cover-hint" data-i18n="obj_cover_hint">Relació 3:1 (panoràmica) · recomanat 1200×400 px. Puja-la ja retallada — es mostrarà tal qual, sense recorte automàtic.</div>
+      <div id="obj-cover-preview" class="obj-cover-preview hidden"></div>
+      <input type="file" accept="image/*" id="obj-cover-input" onchange="handleObjectiveCoverSelect(event)">
+      <input type="hidden" id="obj-cover-url" value="">
+      <button type="button" class="btn btn-secondary btn-sm hidden" id="btn-remove-cover" onclick="removeObjectiveCover()" data-i18n="obj_cover_remove_btn">🗑 Eliminar imatge</button>
     </div>
     <!-- status is managed automatically, hidden field.
          DECISIÓ (pla multi-repte, FEM_reptes.md Fase 4): l'Estat de la targeta

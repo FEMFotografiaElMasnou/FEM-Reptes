@@ -37,6 +37,16 @@ export function _formatDateEs(dateVal) {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+// Mateixa lògica que _formatDateEs() (slicing de string, evita desfasos de
+// fus horari) però amb separador "/" — format demanat per als rangs de
+// pujada/votació de la capçalera del repte (box "Repte / Foto pujada",
+// 2026-07-24): "dd/mm/aaaa". Exportada perquè participant.js la reutilitza.
+export function _formatDateSlash(dateVal) {
+  if (!dateVal || typeof dateVal !== 'string' || dateVal.length < 10) return '';
+  const yyyy = dateVal.slice(0, 4), mm = dateVal.slice(5, 7), dd = dateVal.slice(8, 10);
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 // Nom real de l'autor. Només per al panell d'admin: aquí no s'aplica
 // l'anonimat de la votació (getDisplayName), l'admin gestiona i ha de saber qui és qui.
 function _authorName(userId) {

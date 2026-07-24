@@ -1,5 +1,6 @@
 // ═══════════════════════════════════
-// TEMÀTIQUES — lista, finalización y CRUD (sin DELETE desde UI)
+// REPTES — lista, finalización y CRUD (sin DELETE desde UI)
+// (Nom del fitxer, tematiques.js, encara sense renombrar — pendent, vegeu CHANGELOG/tasca)
 // ═══════════════════════════════════
 import { state } from '../core/state.js';
 import { t, applyTranslations } from '../core/i18n.js';
@@ -7,10 +8,11 @@ import { showToast, showLoader, hideLoader } from '../ui/toast.js';
 import { confirmAction, openModal, closeModal } from '../ui/modals.js';
 import { saveObjectives, saveSettings, getActiveAllPhotos, getVotingProgress } from '../core/data.js';
 import { getPhotoScore, assignPositionPoints, renderRanking } from './ranking.js';
-import { renderAdminGallery } from './fotos.js';
+import { renderAdminGallery, compressImage } from './fotos.js';
 import { updateVoteButtonsState } from './votacio.js';
 import { refreshAdminDashboard } from '../screens/admin.js';
 import { getActiveCalendar } from './calendari.js';
+import { CLOUDINARY_PRESET, CLOUDINARY_URL, _dbMode } from '../core/config.js';
 
 // FASE 4/5 (pla multi-repte, FEM_reptes.md — FET, 2026-07-17): cada targeta
 // de repte gestiona ara ella mateixa la seva pujada i votació, amb 2
@@ -197,20 +199,91 @@ export function openObjectiveModal(id) {
     document.getElementById('obj-title').value  = obj.title;
     document.getElementById('obj-desc').value   = obj.description;
     document.getElementById('obj-status').value = obj.status;
+    document.getElementById('obj-cover-url').value = obj.coverImageUrl || '';
+    _renderObjCoverPreview(obj.coverImageUrl || '');
   } else {
     document.getElementById('obj-modal-title').textContent = t('new_objective_btn');
     document.getElementById('obj-title').value  = '';
     document.getElementById('obj-desc').value   = '';
     document.getElementById('obj-status').value = 'active';
+    document.getElementById('obj-cover-url').value = '';
+    _renderObjCoverPreview('');
   }
   openModal('modal-objective');
 }
 
+// ═══════════════════════════════════
+// IMATGE DE FONS DEL REPTE (box "Repte / Foto pujada", 2026-07-24)
+// ═══════════════════════════════════
+// Puja/treu la preview del modal segons hi hagi o no URL de cover desada.
+function _renderObjCoverPreview(url) {
+  const prevEl = document.getElementById('obj-cover-preview');
+  const rmBtn  = document.getElementById('btn-remove-cover');
+  if (!prevEl) return;
+  if (url) {
+    prevEl.innerHTML = `<img src="${url}" alt="">`;
+    prevEl.classList.remove('hidden');
+    if (rmBtn) rmBtn.classList.remove('hidden');
+  } else {
+    prevEl.innerHTML = '';
+    prevEl.classList.add('hidden');
+    if (rmBtn) rmBtn.classList.add('hidden');
+  }
+}
+
+// Selecció d'imatge de fons al modal de repte: comprimeix (mida de banner,
+// no cal la resolució completa d'una foto de concurs) i puja directament a
+// Cloudinary — mateix flux que uploadPhoto() (fotos.js) però sense pas
+// intermedi de "preview abans de confirmar": el repte encara no s'ha desat,
+// així que la URL només queda efectiva quan es prem "Guardar" (saveObjective()
+// la llegeix de #obj-cover-url).
+export async function handleObjectiveCoverSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast(t('select_valid_image'), 'error'); return; }
+
+  showLoader(t('uploading'));
+  try {
+    const fileToUpload = await compressImage(file, 1600, 1600, 0.85);
+
+    if (!CLOUDINARY_PRESET || CLOUDINARY_PRESET === 'YOUR_PRESET') {
+      throw new Error('Cloudinary upload preset not configured');
+    }
+    const formData = new FormData();
+    formData.append('file',          fileToUpload);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    const baseFolder = _dbMode === 'test' ? 'FemReptes_TEST' : 'FemReptes';
+    formData.append('folder', baseFolder + '/_cover_reptes');
+
+    const res  = await fetch(CLOUDINARY_URL, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) throw new Error('Cloudinary: ' + data.error.message);
+    if (!data.secure_url) throw new Error('Resposta inesperada de Cloudinary');
+
+    document.getElementById('obj-cover-url').value = data.secure_url;
+    _renderObjCoverPreview(data.secure_url);
+    hideLoader();
+  } catch (err) {
+    hideLoader();
+    console.error('Cover image upload error:', err);
+    showToast(t('upload_error_generic'), 'error');
+  } finally {
+    // Permet re-seleccionar el mateix fitxer si cal tornar-ho a intentar
+    e.target.value = '';
+  }
+}
+
+export function removeObjectiveCover() {
+  document.getElementById('obj-cover-url').value = '';
+  _renderObjCoverPreview('');
+}
+
 export async function saveObjective() {
-  const id          = document.getElementById('obj-edit-id').value;
-  const title       = document.getElementById('obj-title').value.trim();
-  const description = document.getElementById('obj-desc').value.trim();
-  const status      = document.getElementById('obj-status').value;
+  const id            = document.getElementById('obj-edit-id').value;
+  const title         = document.getElementById('obj-title').value.trim();
+  const description   = document.getElementById('obj-desc').value.trim();
+  const status        = document.getElementById('obj-status').value;
+  const coverImageUrl = document.getElementById('obj-cover-url').value.trim();
 
   if (!title) { showToast(t('title_required'), 'error'); return; }
 
@@ -230,9 +303,9 @@ export async function saveObjective() {
   // cada repte actiu.
 
   if (id) {
-    // Editing existing: only update title and description, keep status unchanged
+    // Editing existing: only update title, description and cover image, keep status unchanged
     const obj = state.objectives.find(o => o.id === id);
-    if (obj) { obj.title = title; obj.description = description; }
+    if (obj) { obj.title = title; obj.description = description; obj.coverImageUrl = coverImageUrl; }
   } else {
     // New objective is always created as active
     state.objectives.push({
@@ -240,6 +313,7 @@ export async function saveObjective() {
       uploads_enabled: false, voting_enabled: false,
       start_date: new Date().toISOString().split('T')[0], end_date: '',
       created_by: state.currentUser.id,
+      coverImageUrl,
     });
   }
 
@@ -256,3 +330,5 @@ window.renderObjectivesList = renderObjectivesList;
 window.finalizeObjective = finalizeObjective;
 window.openObjectiveModal = openObjectiveModal;
 window.saveObjective = saveObjective;
+window.handleObjectiveCoverSelect = handleObjectiveCoverSelect;
+window.removeObjectiveCover = removeObjectiveCover;

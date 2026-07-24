@@ -57,7 +57,9 @@ export async function loadAllData() {
     // BD 2026-07, vegeu Diagnostic_objectives_reptes_calendari.md. Abans calia
     // una segona consulta a part (`reptes_calendari`); ara tot un repte viu en
     // una sola fila d'`objectives`.
-    sb.from('objectives').select('id,name,description,status,uploads_enabled,voting_enabled,names_revealed,start_date,end_date,created_by,cal_upload_start,cal_upload_end,cal_voting_start,cal_voting_end,upload_mode,voting_mode'),
+    // cover_image_url afegit (2026-07-24): imatge de fons de la capçalera del
+    // repte, box "Repte / Foto pujada" (costat participant). Opcional.
+    sb.from('objectives').select('id,name,description,status,uploads_enabled,voting_enabled,names_revealed,start_date,end_date,created_by,cal_upload_start,cal_upload_end,cal_voting_start,cal_voting_end,upload_mode,voting_mode,cover_image_url'),
     sb.from('photo_submissions').select('id,user_id,objective_id,file_name,file_url,original_url,file_size,published,revealed,submitted_at,caption'),
     sb.from('votes').select('id,user_id,photo_id,objective_id,creativity,theme,composition'),
     sb.from('app_settings').select('key,value'),
@@ -124,6 +126,7 @@ export async function loadAllData() {
     votingEnd:       o.cal_voting_end   || '',
     uploadMode:      o.upload_mode || 'calendari',
     votingMode:      o.voting_mode || 'calendari',
+    coverImageUrl:   o.cover_image_url || '',
   }));
 
   // ── Photos
@@ -268,6 +271,7 @@ export async function saveObjectives() {
     cal_voting_end:   o.votingEnd   || null,
     upload_mode:      o.uploadMode  || 'calendari',
     voting_mode:      o.votingMode  || 'calendari',
+    cover_image_url:  o.coverImageUrl || null,
   }));
   const { error } = await sb.from('objectives').upsert(rows, { onConflict: 'id' });
   if (error) console.error('saveObjectives error', error);

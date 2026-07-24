@@ -8,6 +8,63 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). F
 
 ---
 
+## [0.1.45] — 2026-07-24 — Racionalització BD: `objectives` absorbeix `reptes_calendari`
+
+> Origen: anàlisi d'Enric detectant que `objectives` i `reptes_calendari` tenien
+> responsabilitats solapades sobre el mateix concepte (estat de pujada/votació
+> d'un repte) — vegeu `Diagnostic_objectives_reptes_calendari.md` (Enric, fora
+> d'aquesta carpeta) per al diagnòstic complet i el registre pas a pas de la
+> migració (Normal i Test). Objectiu: `reptes_calendari` no calia com a taula a
+> part — ampliar `objectives` en lloc de mantenir dues taules 1:1 amb
+> responsabilitat repartida sobre el mateix resultat.
+
+### Canviat — esquema Supabase (Normal i Test)
+- **`objectives`**: 6 columnes noves — `cal_upload_start`, `cal_upload_end`,
+  `cal_voting_start`, `cal_voting_end` (date), `upload_mode`, `voting_mode`
+  (text, `calendari`/`obert`/`tancat`, mateix check que abans). Prefix `cal_`
+  a les dates per no col·lidir amb `objectives.start_date`/`end_date`
+  (creació/finalització del repte — un concepte diferent, no tocat).
+- **Backfill** de les dades existents a `reptes_calendari` cap a aquestes
+  columnes noves (fet als 2 entorns; verificat fila a fila).
+- **`fem_apply_calendar()`** (cron, `pg_cron`, 00:05 UTC) reescrita: ja no fa
+  `join` amb `reptes_calendari` — llegeix el calendari directament d'`objectives`.
+- **`reptes_calendari`**: ja no rep cap escriptura (frontend i cron adaptats,
+  vegeu més avall). **Es manté per ara sense eliminar** (període d'observació);
+  `automation_enabled` hi era una columna morta des de la Fase 4/5 (2026-07-17,
+  vegeu pla de sota) i no s'ha migrat enlloc.
+
+### Canviat — codi
+- **`js/core/data.js`**: `loadAllData()` demana els 6 camps nous a la mateixa
+  consulta d'`objectives` (ja no fa una segona consulta a `reptes_calendari`);
+  `saveObjectives()` els desa igual. `state.reptesCalendari` retirat.
+- **`js/features/calendari.js`**: `getActiveCalendar()`, `setPhaseMode()` i
+  `updateCalendarDate()` llegeixen/escriuen `objectives` en lloc
+  d'`upsert`/`find` sobre `reptes_calendari`. **Mateixa forma de retorn de
+  `getActiveCalendar()`** (`uploadStart`/`uploadEnd`/`votingStart`/`votingEnd`/
+  `uploadMode`/`votingMode`) que abans — `tematiques.js` i la resta de crides
+  no s'han hagut de tocar.
+- **`js/core/state.js`**: camp `reptesCalendari` retirat de l'estat inicial.
+- **`js/features/fotos.js`**: només un comentari actualitzat (cap canvi de lògica).
+
+### Verificat
+- Repte real "Contrallums" creat i editat a Test i, després, a Normal
+  (producció): confirmat a la BD que les dates/modes es graven a
+  `objectives.cal_*` i que `reptes_calendari` ja no rep escriptures.
+- Un primer intent a cada entorn (Test i, després, Normal) va escriure encara
+  a `reptes_calendari` per caché del navegador amb el JS antic — detectat
+  comparant la BD amb el que s'esperava, corregit amb un hard refresh. Cap
+  pèrdua de dades (backfill de seguretat aplicat abans de confirmar la caché).
+
+### SQL aplicat (Normal i Test — ja fet, es deixa aquí per referència/repetibilitat)
+Vegeu `sql/2026-07-24_racionalitzacio_objectives.sql`.
+
+### Pendent (fora d'abast d'aquesta tasca, sense pressa perquè no afecta el funcionament)
+- Eliminar `reptes_calendari` (període d'observació abans).
+- Renombrar `objectives` → `reptes` (+ 2 línies equivalents a `FEM-Resultats/src/App.jsx`,
+  que només llegeix `id`/`name`/`status` d'aquesta taula — vegeu el diagnòstic).
+
+---
+
 ## [0.1.44] — 2026-07-22 — Fix botó "Enviar Vots" no es bloquejava després d'enviar
 
 > Queixa: un cop enviada la votació, la capçalera de la pantalla ja mostrava

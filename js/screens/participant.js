@@ -6,7 +6,7 @@ import { t, applyTranslations } from '../core/i18n.js';
 import { showToast } from '../ui/toast.js';
 import { renderVotingGrid, updateVoteButtonsState, isVotingSubmitted } from '../features/votacio.js';
 import { renderRanking, renderResultatsRepte } from '../features/ranking.js';
-import { updateUploadSection, _formatDateEs } from '../features/fotos.js';
+import { updateUploadSection, _formatDateEs, _formatDateSlash } from '../features/fotos.js';
 import { setActiveNav, switchTab } from '../core/router.js';
 import { populateGalleryFilters, renderGallery, startGalleryCarousel, stopGalleryCarousel } from '../features/galeria.js';
 import { getActiveCalendar } from '../features/calendari.js';
@@ -201,6 +201,53 @@ export function refreshParticipantDashboard() {
   document.getElementById('participant-objective-desc').textContent = obj
     ? (obj.description || '')
     : t('no_active_objective_short');
+
+  // Imatge de fons de la capçalera del repte (objectives.cover_image_url,
+  // pujada per l'admin des del modal de repte — 2026-07-24). Sense imatge,
+  // la capçalera queda exactament com abans (fons pla, sense classe extra).
+  const headerEl = document.getElementById('objective-header');
+  if (headerEl) {
+    if (obj && obj.coverImageUrl) {
+      headerEl.style.backgroundImage =
+        `linear-gradient(180deg, rgba(10,20,50,.30), rgba(10,20,50,.78)), url("${obj.coverImageUrl}")`;
+      headerEl.classList.add('objective-header--has-cover');
+    } else {
+      headerEl.style.backgroundImage = '';
+      headerEl.classList.remove('objective-header--has-cover');
+    }
+  }
+
+  // Rang de dates de pujada/votació del repte (objectives.cal_upload_*/
+  // cal_voting_*, via getActiveCalendar()) — es mostren dins la mateixa
+  // capçalera perquè el repte informi de les dates sense haver d'obrir cap
+  // altra pantalla. Format "dd/mm/aaaa" (_formatDateSlash, fotos.js). Si
+  // falta alguna de les dues dates d'un rang, es deixa la línia amagada en
+  // lloc de mostrar un rang a mitges.
+  const calUploadEl = document.getElementById('participant-objective-cal-upload');
+  const calVotingEl = document.getElementById('participant-objective-cal-voting');
+  const cal = obj ? getActiveCalendar(obj.id) : null;
+  if (calUploadEl) {
+    const start = cal ? _formatDateSlash(cal.uploadStart) : '';
+    const end   = cal ? _formatDateSlash(cal.uploadEnd)   : '';
+    if (start && end) {
+      calUploadEl.textContent = t('cal_upload_range_label').replace('{start}', start).replace('{end}', end);
+      calUploadEl.classList.remove('hidden');
+    } else {
+      calUploadEl.textContent = '';
+      calUploadEl.classList.add('hidden');
+    }
+  }
+  if (calVotingEl) {
+    const start = cal ? _formatDateSlash(cal.votingStart) : '';
+    const end   = cal ? _formatDateSlash(cal.votingEnd)   : '';
+    if (start && end) {
+      calVotingEl.textContent = t('cal_voting_range_label').replace('{start}', start).replace('{end}', end);
+      calVotingEl.classList.remove('hidden');
+    } else {
+      calVotingEl.textContent = '';
+      calVotingEl.classList.add('hidden');
+    }
+  }
 
   // (La barra PROGRÉS VOTACIONS s'ha mogut al dashboard d'admin, v0.1.21:
   //  els socis ja no la veuen.)

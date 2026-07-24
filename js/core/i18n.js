@@ -54,6 +54,10 @@ export const TRANSLATIONS = {
     // Objectives
     objectives_title: 'Gestió de reptes', new_objective_btn: 'Nou Repte',
     obj_title_label: 'Títol', obj_desc_label: 'Descripció',
+    // Imatge de fons del repte (box "Repte / Foto pujada", 2026-07-24)
+    obj_cover_label: 'Imatge de fons (opcional)',
+    obj_cover_hint: 'Relació 3:1 (panoràmica) · recomanat 1200×400 px. Puja-la ja retallada — es mostrarà tal qual, sense recorte automàtic.',
+    obj_cover_remove_btn: '🗑 Eliminar imatge',
     finalize_btn: 'Finalitzar', edit_btn: 'Editar', delete_btn: 'Eliminar',
     active_badge: 'Actiu', finished_badge: 'Finalitzat', inactive_badge: 'Inactiu',
     save_btn: 'Guardar', cancel_btn: 'Cancel·lar',
@@ -251,6 +255,10 @@ export const TRANSLATIONS = {
     date_upload_end_label: 'Fi pujada',
     date_voting_start_label: 'Inici votació',
     date_voting_end_label: 'Fi votació',
+    // Rang de dates a la capçalera del repte (box "Repte / Foto pujada",
+    // costat participant, 2026-07-24). {start}/{end} en format dd/mm/aaaa.
+    cal_upload_range_label: 'Pujada de fotos: {start} - {end}',
+    cal_voting_range_label: 'Votacions: {start} - {end}',
     no_photos_to_vote: 'No hi ha fotos publicades per votar.',
     already_voted_locked_msg: 'Ja has enviat la teva votació. La pantalla queda bloquejada.',
     voting_not_open_msg: 'Votacions no obertes — pots veure les fotos però encara no pots votar',
@@ -411,6 +419,9 @@ export const TRANSLATIONS = {
     // Objectives
     objectives_title: 'Gestión de retos', new_objective_btn: 'Nuevo Reto',
     obj_title_label: 'Título', obj_desc_label: 'Descripción',
+    obj_cover_label: 'Imagen de fondo (opcional)',
+    obj_cover_hint: 'Relación 3:1 (panorámica) · recomendado 1200×400 px. Súbela ya recortada — se mostrará tal cual, sin recorte automático.',
+    obj_cover_remove_btn: '🗑 Eliminar imagen',
     finalize_btn: 'Finalizar', edit_btn: 'Editar', delete_btn: 'Eliminar',
     active_badge: 'Activo', finished_badge: 'Finalizado', inactive_badge: 'Inactivo',
     save_btn: 'Guardar', cancel_btn: 'Cancelar',
@@ -602,6 +613,8 @@ export const TRANSLATIONS = {
     date_upload_end_label: 'Fin subida',
     date_voting_start_label: 'Inicio votación',
     date_voting_end_label: 'Fin votación',
+    cal_upload_range_label: 'Subida de fotos: {start} - {end}',
+    cal_voting_range_label: 'Votaciones: {start} - {end}',
     no_photos_to_vote: 'No hay fotos publicadas para votar.',
     already_voted_locked_msg: 'Ya enviaste tu votación. La pantalla queda bloqueada.',
     voting_not_open_msg: 'Votaciones no abiertas — puedes ver las fotos pero aún no puedes votar',
