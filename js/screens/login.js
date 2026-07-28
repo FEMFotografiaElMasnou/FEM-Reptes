@@ -44,8 +44,13 @@ export async function init() {
 
   hideLoader();
 
+  // (28/07/2026) Aquí hi havia el rètol "Primera configuració" amb el botó
+  // d'inicialitzar la base de dades. Retirat: amb la BD poblada, una llista
+  // d'usuaris buida no vol dir "cal inicialitzar", vol dir "la càrrega ha
+  // fallat" — i és exactament el que va passar del 26 al 28/07. Vegeu el
+  // comentari d'initializeDB(), més avall.
   if (state.users.length === 0) {
-    document.getElementById('setup-banner').style.display = 'block';
+    console.error('init(): la llista d\'usuaris ha arribat buida. Si la BD no és nova, és un error de càrrega (permisos, RLS o xarxa).');
   }
 
   // Restaurar sessió guardada (evita re-login en recarregar la pàgina)
@@ -67,42 +72,26 @@ export async function init() {
   applyTranslations();
 }
 
-export async function initializeDB() {
-  const btn = document.getElementById('btn-init');
-  btn.innerHTML = '<span class="loader"></span> ' + t('init_db_loader');
-  btn.disabled  = true;
-
-  const now = new Date().toISOString();
-
-  // Insert default admin
-  const { error } = await sb.from('users').upsert([{
-    id:           'u_admin_1',
-    display_name: 'Administrador',
-    email:        'admin@femrank.cat',
-    role:         'admin',
-    password:     'admin123',
-    created_at:   now,
-  }], { onConflict: 'id' });
-
-  // Init settings
-  await sb.from('app_settings').upsert([
-    { id: 'cfg_uploads',  key: 'uploads_enabled', value: 'true',  updated_at: now, updated_by: 'system' },
-    { id: 'cfg_voting',   key: 'voting_enabled',  value: 'false', updated_at: now, updated_by: 'system' },
-    { id: 'cfg_revealed', key: 'names_revealed',   value: 'false', updated_at: now, updated_by: 'system' },
-  ], { onConflict: 'id' });
-
-  if (!error) {
-    await loadAllData();
-    document.getElementById('setup-banner').style.display = 'none';
-    document.getElementById('login-user').value = 'admin@femrank.cat';
-    document.getElementById('login-pass').value  = 'admin123';
-    showToast(t('db_initialized'), 'success');
-  } else {
-    btn.innerHTML = t('init_db_btn');
-    btn.disabled  = false;
-    showToast(t('sheets_error'), 'error');
-  }
-}
+// initializeDB() RETIRADA (28/07/2026). Aquí NO era inofensiva, a diferència de
+// la versió equivalent de FEM-Foto (que passa per fem_bootstrap_admin(), i el
+// servidor només l'executa amb `users` buida). El que feia era un `upsert` amb
+// `onConflict: 'id'` sobre `u_admin_1`, o sigui:
+//
+//   · a Test, on `u_admin_1` EXISTEIX → hauria estat un UPDATE: contrasenya del
+//     compte reescrita a 'admin123' (només a public.users, desincronitzant-lo
+//     d'auth.users) i email canviat a admin@femrank.cat.
+//   · a Normal, on no existeix → hauria creat un admin nou amb contrasenya
+//     coneguda i sense parella a auth.users.
+//   · i, en tots dos casos, hauria reescrit tres claus d'app_settings.
+//
+// Un usuari anònim no ho aconseguia (la RLS li rebutja les escriptures), però
+// un ADMIN amb sessió sí — i el rètol que hi donava accés apareixia justament
+// quan la càrrega fallava, o sigui enmig d'una avaria i amb algú nerviós al
+// teclat. Fins al 28/07 "Sortir" ni tan sols tancava la sessió d'Auth, així que
+// la combinació era perfectament assolible.
+//
+// Per muntar un projecte de Supabase nou de zero: cridar `fem_bootstrap_admin()`
+// des de l'editor SQL.
 
 // ═══════════════════════════════════
 // LOGIN
@@ -139,7 +128,6 @@ export async function handleLogin() {
   btn.disabled  = false;
 
   if (state.users.length === 0) {
-    document.getElementById('setup-banner').style.display = 'block';
     errEl.style.display = 'block';
     errEl.textContent   = t('no_users_found');
     return;
@@ -254,7 +242,18 @@ export function enterAsEmail(email) {
   return true;
 }
 
-export function logout() {
+export async function logout() {
+  // (2026-07-28) Tancar TAMBÉ la sessió de Supabase Auth. Des que el login hi
+  // passa, netejar només la sessió pròpia de l'app deixava el testimoni d'Auth
+  // viu al navegador després de prémer "Sortir" — en un ordinador compartit,
+  // una sessió vàlida abandonada. Va embolicat en try/catch a posta: si la
+  // sessió ja no és vàlida, signOut() pot fallar, i sortir de l'app no pot
+  // dependre mai que això funcioni.
+  try {
+    await sb.auth.signOut();
+  } catch (e) {
+    console.warn('signOut() ha fallat en sortir; es continua igualment', e);
+  }
   stopAutoRefresh();
   state.currentUser = null;
   clearSession();
@@ -475,13 +474,13 @@ export async function handleUnsubscribe() {
 
   showToast(t('account_deleted'), 'info');
   await new Promise(r => setTimeout(r, 1500));
-  logout();
+  // await: logout() tanca també la sessió d'Auth del compte acabat d'esborrar.
+  await logout();
 }
 
 // Exponer en window las funciones usadas desde onclick del HTML
 window.handleLogin = handleLogin;
 window.logout = logout;
-window.initializeDB = initializeDB;
 window.saveNewPassword = saveNewPassword;
 window.showLoginTab = showLoginTab;
 window.showRegisterTab = showRegisterTab;

@@ -100,7 +100,8 @@ export async function switchDbMode(newMode) {
   }
 
   // Fallback (no s'ha trobat l'usuari a test) o tornada a Normal → login
-  logout();
+  // await: logout() és asíncrona des del 28/07 (tanca també la sessió d'Auth).
+  await logout();
 
   const modeLabel = _dbMode === 'test' ? ('🔴 ' + t('db_mode_test')) : ('🟢 ' + t('db_mode_normal'));
   showToast(t('db_mode_changed').replace('{mode}', modeLabel), _dbMode === 'test' ? 'error' : 'success');

@@ -63,12 +63,10 @@
       <div id="login-test-banner" style="display:none;background:rgba(255,59,48,0.1);border:1px solid rgba(255,59,48,0.35);border-radius:8px;padding:8px 12px;margin-bottom:14px;text-align:center;font-size:12px;font-weight:700;color:#ff3b30;letter-spacing:0.06em;">
         <span data-i18n="test_mode_banner">🔴 MODE TEST — Base de dades de proves</span>
       </div>
-      <!-- Setup banner (shown only if DB is empty) -->
-      <div id="setup-banner" style="display:none;background:rgba(232,197,71,0.08);border:1px solid rgba(232,197,71,0.3);border-radius:10px;padding:14px;margin-bottom:18px;">
-        <div style="font-size:13px;color:var(--accent);font-weight:600;margin-bottom:8px;" data-i18n="setup_banner_title">⚙️ Primera configuració</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;" data-i18n="setup_banner_msg">No s'han trobat usuaris a la base de dades. Inicialitza per crear l'administrador per defecte.</div>
-        <button type="button" class="btn btn-primary btn-sm btn-full" onclick="initializeDB()" id="btn-init" data-i18n="init_db_btn">Inicialitzar Base de Dades</button>
-      </div>
+      <!-- El rètol "Primera configuració" amb el botó "Inicialitzar Base de
+           Dades" s'ha RETIRAT (28/07/2026). Vegeu el comentari d'initializeDB()
+           a js/screens/login.js: podia reescriure un compte d'admin real i tres
+           claus d'app_settings, i només apareixia quan la càrrega fallava. -->
       <!-- Tab toggle -->
       <div style="display:flex;gap:4px;background:var(--surface2);border-radius:10px;padding:4px;margin-bottom:20px;">
         <button type="button" id="tab-login"    onclick="showLoginTab()"    class="login-tab-btn active-tab" data-i18n="login_tab">Iniciar Sessió</button>
