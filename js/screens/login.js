@@ -145,43 +145,96 @@ export async function handleLogin() {
     return;
   }
 
-  // Match by email, username, or display name — case-insensitive
+  // ── Comprovació de contrasenya AL SERVIDOR (2026-07-28) ───────────────────
+  // Abans això es feia aquí mateix, comparant state.users[i].password amb el
+  // que s'havia escrit. Ja no és possible ni legítim: el client no pot llegir
+  // la columna `password` des del 26/07/2026, i el que decideix qui entra és
+  // Supabase Auth. A més, entrar per Auth és imprescindible per una segona
+  // raó: des del 27/07 les polítiques RLS d'escriptura (votes,
+  // photo_submissions, seguiment_votacio) exigeixen auth.uid(), o sigui que
+  // sense sessió d'Auth l'usuari entraria però NO podria votar ni pujar foto.
+  //
+  // Tots els socis ja tenen compte a auth.users amb la seva contrasenya
+  // d'abans (migració del 26/07), així que per a ells això és transparent.
   const input = username.toLowerCase().trim();
-  const pass  = String(password).trim();
 
-  // First, find the user by identity (without password check) to detect reset state
   const userByIdentity = state.users.find(u =>
     u.email.toLowerCase().trim() === input ||
     u.username.toLowerCase().trim() === input ||
     u.name.toLowerCase().trim() === input
   );
 
-  // If user exists but password is empty in DB → admin has reset it → force new-password flow.
-  if (userByIdentity && String(userByIdentity.password || '').trim() === '') {
-    openNewPasswordModal(userByIdentity);
-    return;
+  // signInWithPassword() només entén emails; el camp accepta també el nom.
+  const email = userByIdentity
+    ? String(userByIdentity.email || '').toLowerCase().trim()
+    : (input.includes('@') ? input : '');
+
+  if (email) {
+    const { error: authError } = await sb.auth.signInWithPassword({ email, password });
+    if (!authError) {
+      const profile = userByIdentity
+        || state.users.find(u => String(u.email || '').toLowerCase().trim() === email);
+      if (profile) {
+        state.currentUser = profile;
+        saveSession(profile);
+        if (profile.role === 'admin') showAdminScreen();
+        else showParticipantScreen();
+        return;
+      }
+      // Sessió d'Auth vàlida però sense fila a public.users: estat
+      // inconsistent. No el deixem entrar a mitges — l'app necessita el
+      // perfil per saber-ne el rol.
+      await sb.auth.signOut();
+      console.error('Sessió d\'Auth vàlida però sense perfil a public.users:', email);
+      errEl.style.display = 'block';
+      errEl.textContent   = t('login_invalid');
+      return;
+    }
   }
 
-  const user = state.users.find(u =>
-    (u.email.toLowerCase().trim() === input ||
-     u.username.toLowerCase().trim() === input ||
-     u.name.toLowerCase().trim() === input) &&
-    String(u.password).trim() === pass
-  );
+  // ── Camí de reserva: RPC fem_login() ──────────────────────────────────────
+  // Cobreix el cas legítim de la contrasenya reiniciada per un admin (queda
+  // buida a public.users, i per tant Auth no la pot validar mai). Comprova al
+  // servidor i no retorna mai la contrasenya.
+  const { data: rows, error: rpcError } = await sb.rpc('fem_login', {
+    p_identity: username,
+    p_password: password,
+  });
 
-  if (!user) {
+  if (rpcError) {
+    console.error('fem_login error', rpcError);
     errEl.style.display = 'block';
     errEl.textContent   = t('login_invalid');
     return;
   }
 
-  state.currentUser = user;
-  saveSession(user);
-  if (user.role === 'admin') {
-    showAdminScreen();
-  } else {
-    showParticipantScreen();
+  const result = (rows && rows[0]) || { status: 'invalid' };
+
+  if (result.status === 'reset_required') {
+    openNewPasswordModal({
+      id: result.id, name: result.display_name, email: result.email,
+      username: result.email, role: result.role,
+    });
+    return;
   }
+
+  if (result.status !== 'ok') {
+    errEl.style.display = 'block';
+    errEl.textContent   = t('login_invalid');
+    return;
+  }
+
+  // Sense sessió real d'Auth: entra, però les escriptures li fallaran per RLS.
+  console.warn('Accés pel camí de reserva (fem_login): sense sessió d\'Auth, aquest compte no podrà votar ni pujar foto. Email:', result.email);
+
+  const fallbackUser = {
+    id: result.id, name: result.display_name, email: result.email,
+    username: result.email, role: result.role,
+  };
+  state.currentUser = fallbackUser;
+  saveSession(fallbackUser);
+  if (fallbackUser.role === 'admin') showAdminScreen();
+  else showParticipantScreen();
 }
 
 // Entra directament com l'usuari amb aquest email (sense demanar contrasenya).
@@ -245,18 +298,39 @@ export async function saveNewPassword() {
   }
   if (!_pendingPasswordUser) return;
 
-  const { error } = await sb.from('users')
-    .update({ password: p1 })
-    .eq('id', _pendingPasswordUser.id);
+  // (2026-07-28) Abans això era un UPDATE directe sobre public.users. Ara no
+  // serviria de res i seria perillós: (a) la RLS només deixa fer UPDATE a
+  // `users` a un admin autenticat, i qui arriba aquí encara no té sessió; i
+  // (b) escriure la contrasenya només a public.users deixaria auth.users amb
+  // l'antiga, o sigui que el soci es quedaria sense poder entrar. La RPC
+  // fem_set_new_password() escriu les dues taules alhora, i només ho accepta
+  // mentre la contrasenya actual sigui buida (el mateix invariant que fa que
+  // fem_login retorni 'reset_required').
+  const { data: ok, error } = await sb.rpc('fem_set_new_password', {
+    p_user_id: _pendingPasswordUser.id,
+    p_new_password: p1,
+  });
 
-  if (error) {
+  if (error || !ok) {
+    if (error) console.error('fem_set_new_password error', error);
     errEl.textContent = t('generic_error');
     errEl.style.display = 'block';
     return;
   }
 
+  // Establir la sessió real d'Auth amb la contrasenya NOVA: aquest camí no
+  // passa per handleLogin(), i sense sessió el soci entraria però no podria
+  // votar ni pujar foto (RLS). Best-effort: si falla, no li tanquem la porta.
+  try {
+    await sb.auth.signInWithPassword({
+      email: String(_pendingPasswordUser.email || '').toLowerCase().trim(),
+      password: p1,
+    });
+  } catch (e) {
+    console.warn('No s\'ha pogut obrir sessió d\'Auth després del canvi de contrasenya', e);
+  }
+
   // Update local state and proceed with login
-  _pendingPasswordUser.password = p1;
   state.currentUser = _pendingPasswordUser;
   saveSession(_pendingPasswordUser);
   closeModal('modal-new-password');
@@ -326,25 +400,35 @@ export async function handleRegister() {
     created_at: new Date().toISOString(),
   };
 
-  // Insert — Supabase UNIQUE constraint on email handles duplicates
-  const { error } = await sb.from('users').insert([{
-    id:           newUser.id,
-    display_name: newUser.name,
-    email:        newUser.email,
-    role:         newUser.role,
-    password:     newUser.password,
-    created_at:   newUser.created_at,
-  }]);
+  // (2026-07-28) Abans era un INSERT directe a public.users. Això ara crearia
+  // un compte coix: existiria a public.users però no a auth.users, i per tant
+  // el soci nou no podria establir sessió d'Auth — entraria i no podria ni
+  // votar ni pujar foto (RLS des del 27/07). fem_register_account() crea les
+  // dues files dins la mateixa transacció. El rol el fixa el servidor a
+  // 'participant': no és paràmetre, així que ningú es pot crear un admin
+  // cridant l'RPC per API.
+  const { data: rows, error } = await sb.rpc('fem_register_account', {
+    p_name:     newUser.name,
+    p_email:    newUser.email,
+    p_password: pass,
+  });
 
-  if (error && error.code === '23505') {
-    // Duplicate email
+  const result = (rows && rows[0]) || { status: 'invalid' };
+
+  if (!error && result.status === 'email_exists') {
     hideLoader();
     errEl.style.display = 'block';
     errEl.textContent   = t('register_email_exists');
     btn.innerHTML = t('create_account_btn'); btn.disabled = false; return;
   }
 
-  if (!error) {
+  if (!error && result.status === 'ok') {
+    // Sessió real d'Auth per al compte acabat de crear.
+    try {
+      await sb.auth.signInWithPassword({ email: newUser.email, password: pass });
+    } catch (e) {
+      console.warn('No s\'ha pogut obrir sessió d\'Auth després del registre', e);
+    }
     await loadAllData();
     const savedUser = state.users.find(u => u.email.toLowerCase() === newUser.email.toLowerCase());
     state.currentUser = savedUser || newUser;
@@ -357,6 +441,7 @@ export async function handleRegister() {
     showToast(t('account_created') + ', ' + name + ' 🎉', 'success');
     showParticipantScreen();
   } else {
+    if (error) console.error('fem_register_account error', error);
     errEl.style.display = 'block';
     errEl.textContent   = t('register_error');
   }
@@ -377,8 +462,16 @@ export async function handleUnsubscribe() {
   if (!state.currentUser) return;
   const uid = state.currentUser.id;
 
-  // CASCADE on FK will auto-delete photos and votes
-  await sb.from('users').delete().eq('id', uid);
+  // (2026-07-28) Mateixa RPC que la baixa feta per un admin: esborra la fila
+  // de public.users I el compte d'auth.users. Si només s'esborrés la primera,
+  // el compte d'Auth quedaria orfe i aquella adreça no es podria tornar a fer
+  // servir mai. Fotos i vots segueixen caient per CASCADE.
+  const { data: okDel, error: delErr } = await sb.rpc('fem_delete_account', { p_user_id: uid });
+  if (delErr || !okDel) {
+    console.error('fem_delete_account error', delErr);
+    showToast(t('generic_error'), 'error');
+    return;
+  }
 
   showToast(t('account_deleted'), 'info');
   await new Promise(r => setTimeout(r, 1500));

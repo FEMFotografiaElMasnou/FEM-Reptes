@@ -83,9 +83,8 @@ export async function doResetMemberPassword(userId) {
     showToast('❌ Error', 'error');
     return;
   }
-  // Update local state
-  const u = state.users.find(u => u.id === userId);
-  if (u) u.password = '';
+  // Update local state (state.users ja no porta `password`: buidar-lo a la BD
+  // és el que fa que fem_login() retorni 'reset_required' al pròxim accés)
   renderMembersTable();
   showToast(t('member_reset_done'), 'success');
 }
@@ -147,7 +146,9 @@ export function openMemberModal(id) {
     document.getElementById('member-modal-title').textContent = t('edit_member_title');
     document.getElementById('member-name').value     = u.name;
     document.getElementById('member-username').value = u.email || u.username;
-    document.getElementById('member-password').value = u.password;
+    // Sempre en blanc: el client ja no pot llegir la contrasenya (i no ha de
+    // poder). Buit vol dir "no la canviïs", que és el que saveMember() ja feia.
+    document.getElementById('member-password').value = '';
     document.getElementById('member-role').value     = u.role;
   } else {
     document.getElementById('member-modal-title').textContent = t('new_member_btn');
@@ -167,30 +168,65 @@ export async function saveMember() {
   if (!name || !email) { showToast(t('name_email_required'), 'error'); return; }
 
   if (id) {
-    // Edit existing member — single row update
-    const fields = { display_name: name, email, role };
-    if (password) fields.password = password;
-    const { error } = await sb.from('users').update(fields).eq('id', id);
+    // (2026-07-28) Email i contrasenya ja NO es poden canviar amb un UPDATE
+    // directe: viuen alhora a public.users i a auth.users, i tocar-ne només
+    // una deixaria el soci sense poder entrar (o, pitjor, amb la contrasenya
+    // antiga encara vàlida). Cada cosa té la seva RPC, que escriu les dues
+    // taules dins la mateixa transacció.
+    const prev = state.users.find(u => u.id === id);
+    const emailChanged = !prev || String(prev.email || '').toLowerCase() !== email.toLowerCase();
+
+    const { error } = await sb.from('users').update({ display_name: name, role }).eq('id', id);
     if (error) {
-      showToast(error.code === '23505' ? t('email_exists') : '❌ Error', 'error');
+      showToast('❌ Error', 'error');
       return;
+    }
+
+    if (emailChanged) {
+      const { data: okEmail, error: emailErr } = await sb.rpc('fem_admin_set_email', {
+        p_user_id: id, p_new_email: email,
+      });
+      if (emailErr || !okEmail) {
+        if (emailErr) console.error('fem_admin_set_email error', emailErr);
+        showToast(t('email_exists'), 'error');
+        return;
+      }
+    }
+
+    if (password) {
+      const { data: okPwd, error: pwErr } = await sb.rpc('fem_admin_set_password', {
+        p_user_id: id, p_new_password: password,
+      });
+      if (pwErr || !okPwd) {
+        if (pwErr) console.error('fem_admin_set_password error', pwErr);
+        showToast('❌ Error canviant la contrasenya', 'error');
+        return;
+      }
     }
     // Update local state
     const u = state.users.find(u => u.id === id);
-    if (u) { u.name = name; u.email = email; u.username = email; u.role = role; if (password) u.password = password; }
+    if (u) { u.name = name; u.email = email; u.username = email; u.role = role; }
   } else {
-    // New member — single row insert
+    // (2026-07-28) L'alta ja no és un INSERT directe: crearia un compte coix,
+    // present a public.users però no a auth.users, i el soci nou no podria
+    // establir sessió d'Auth (per tant, ni votar ni pujar foto).
+    // fem_admin_create_member() crea les dues files alhora. No es fa amb
+    // supabase.auth.signUp() a propòsit: signUp() substituiria la sessió de
+    // l'admin per la del compte acabat de crear.
     if (!password) { showToast(t('pass_required'), 'error'); return; }
-    const newId = 'u_' + Date.now();
-    const { error } = await sb.from('users').insert([{
-      id: newId, display_name: name, email, role, password,
-      created_at: new Date().toISOString(),
-    }]);
-    if (error) {
-      showToast(error.code === '23505' ? t('email_exists') : '❌ Error', 'error');
+    const { data: rows, error } = await sb.rpc('fem_admin_create_member', {
+      p_name: name, p_email: email, p_password: password, p_role: role,
+    });
+    const created = (rows && rows[0]) || { status: 'invalid' };
+    if (error || created.status !== 'ok') {
+      if (error) console.error('fem_admin_create_member error', error);
+      showToast(created.status === 'email_exists' ? t('email_exists') : '❌ Error', 'error');
       return;
     }
-    state.users.push({ id: newId, name, email, username: email, password, role, created_at: new Date().toISOString() });
+    state.users.push({
+      id: created.id, name: created.display_name, email: created.email,
+      username: created.email, role: created.role, created_at: created.created_at,
+    });
   }
 
   closeModal('modal-member');
@@ -203,8 +239,16 @@ export async function deleteMember(id) {
   const user = state.users.find(u => u.id === id);
   const userName = user ? user.name : id;
   confirmAction(t('delete_member'), t('confirm_delete_member').replace('{name}', userName), async () => {
-    // CASCADE on FK will auto-delete photos and votes
-    await sb.from('users').delete().eq('id', id);
+    // (2026-07-28) Esborrar només la fila de public.users deixaria el compte
+    // d'auth.users orfe, i aquella adreça quedaria ocupada per sempre: la
+    // persona no s'hauria pogut tornar a donar d'alta mai. fem_delete_account()
+    // esborra les dues. Fotos i vots segueixen caient per CASCADE.
+    const { data: okDel, error: delErr } = await sb.rpc('fem_delete_account', { p_user_id: id });
+    if (delErr || !okDel) {
+      console.error('fem_delete_account error', delErr);
+      showToast('❌ Error', 'error');
+      return;
+    }
     await loadAllData();
     renderMembersTable();
     renderAdminGallery();

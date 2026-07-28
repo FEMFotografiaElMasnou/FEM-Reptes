@@ -48,7 +48,14 @@ export async function loadAppTexts() {
 
 export async function loadAllData() {
   const results = await Promise.all([
-    sb.from('users').select('id,display_name,email,password,role,created_at').order('id', { ascending: true }),
+    // `password` RETIRAT d'aquesta consulta (2026-07-28). El client ja no pot
+    // llegir aquesta columna: es va revocar el SELECT per a anon/authenticated
+    // el 26/07/2026 (FEM-Foto, sql/2026-07-26_login_seguretat_fem_login.sql) i
+    // demanar-la feia fallar TOTA la càrrega amb "permission denied for table
+    // users" — l'app es quedava sense dades i mostrava "Primera configuració".
+    // La comprovació de contrasenya ara la fa el servidor: Supabase Auth i,
+    // com a reserva, la RPC fem_login(). Vegeu handleLogin() a login.js.
+    sb.from('users').select('id,display_name,email,role,created_at').order('id', { ascending: true }),
     // names_revealed afegit a la Fase 2 (multi-repte): vegeu FEM_reptes.md.
     // uploads_enabled/voting_enabled ja existien a la taula però eren lletra
     // morta fins la Fase 2 — ara SÍ que en depèn el mirall de state.settings.
@@ -98,7 +105,10 @@ export async function loadAllData() {
     name:     u.display_name || '',
     email:    u.email || '',
     username: u.email || '',
-    password: u.password || '',
+    // password: ja no arriba de la BD (vegeu la consulta de loadAllData) i
+    // per tant NO existeix a state.users. Qualsevol codi que el vulgui
+    // comparar o mostrar està trencat per disseny: la contrasenya només la
+    // pot validar el servidor.
     role:     u.role || 'participant',
     created_at: u.created_at || '',
   }));
@@ -230,13 +240,18 @@ export async function loadAllData() {
 // ═══════════════════════════════════
 // SAVE HELPERS — SUPABASE
 // ═══════════════════════════════════
+// ⚠️ Aquesta funció NO la crida ningú (comprovat 2026-07-28 a tot el js/).
+// Es deixa perquè no es fa neteja enmig d'una restauració de servei, però
+// se li ha tret `password`: state.users ja no en té, i escriure-hi
+// `undefined` de cop per a tots els socis és jugar amb foc a la taula més
+// delicada de l'app. Si algun dia es torna a fer servir, la contrasenya s'ha
+// de canviar amb fem_admin_set_password(), mai amb un upsert d'aquesta taula.
 export async function saveUsers() {
   const rows = state.users.map(u => ({
     id:           u.id,
     display_name: u.name,
     email:        u.email || u.username,
     role:         u.role,
-    password:     u.password,
     created_at:   u.created_at || new Date().toISOString(),
   }));
   const { error } = await sb.from('users').upsert(rows, { onConflict: 'id' });
