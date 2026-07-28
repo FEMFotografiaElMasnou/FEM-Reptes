@@ -699,24 +699,22 @@
   </div>
 </div>
 
-<!-- Forced new-password modal (after admin reset) -->
-<div class="modal-overlay" id="modal-new-password">
+<!-- Contrasenya temporal generada pel Reset de l'admin (28/07/2026).
+     Substitueix el modal "crea una nova contrasenya", que servia el reset per
+     contrasenya buida: aquell camí ja no existeix (la genera el servidor i el
+     soci entra pel login normal). Es mostra un sol cop; ni el client ni l'admin
+     la poden tornar a consultar. -->
+<div class="modal-overlay" id="modal-temp-password">
   <div class="modal">
-    <h2 data-i18n="new_pwd_modal_title">Crea una nova contrasenya</h2>
-    <p data-i18n="new_pwd_modal_msg" style="color:var(--text-muted);font-size:15px;line-height:1.6;margin-bottom:16px;">
-      L'administrador ha resetejat la teva contrasenya. Introdueix-ne una de nova per continuar.
+    <h2 data-i18n="temp_pwd_title">Contrasenya temporal</h2>
+    <p id="temp-pwd-msg" style="color:var(--text-muted);font-size:15px;line-height:1.6;margin-bottom:16px;"></p>
+    <div id="temp-pwd-value" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:3px;text-align:center;padding:14px;margin-bottom:8px;border:2px dashed var(--border);border-radius:8px;user-select:all;"></div>
+    <p data-i18n="temp_pwd_warning" style="color:var(--text-muted);font-size:14px;line-height:1.5;margin-bottom:16px;">
+      Aquesta contrasenya no es podrà tornar a consultar. Copia-la abans de tancar.
     </p>
-    <div class="form-group">
-      <label data-i18n="new_pwd_label">Nova contrasenya</label>
-      <input type="password" id="new-pwd-input" placeholder="••••••••" autocomplete="new-password">
-    </div>
-    <div class="form-group">
-      <label data-i18n="new_pwd_repeat">Repeteix la contrasenya</label>
-      <input type="password" id="new-pwd-repeat-input" placeholder="••••••••" autocomplete="new-password">
-    </div>
-    <div id="new-pwd-error" class="error-msg" style="display:none;margin-bottom:8px;"></div>
     <div class="modal-actions">
-      <button type="button" class="btn btn-primary" onclick="saveNewPassword()" data-i18n="new_pwd_save">Desar i entrar</button>
+      <button type="button" class="btn btn-secondary" id="temp-pwd-copy" onclick="copyTempPassword()" data-i18n="temp_pwd_copy">Copiar</button>
+      <button type="button" class="btn btn-primary" onclick="closeModal('modal-temp-password')" data-i18n="close_btn">Tancar</button>
     </div>
   </div>
 </div>

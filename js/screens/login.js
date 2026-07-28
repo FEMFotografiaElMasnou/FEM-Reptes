@@ -198,13 +198,13 @@ export async function handleLogin() {
 
   const result = (rows && rows[0]) || { status: 'invalid' };
 
-  if (result.status === 'reset_required') {
-    openNewPasswordModal({
-      id: result.id, name: result.display_name, email: result.email,
-      username: result.email, role: result.role,
-    });
-    return;
-  }
+  // (2026-07-28, segona tanda) Aquí hi havia el camí 'reset_required': quan la
+  // contrasenya era buida a public.users, s'obria el modal per triar-ne una de
+  // nova. Aquell mecanisme s'ha retirat perquè no revocava res (auth.users
+  // conservava l'antiga, i el login la valida primer) i perquè, mentre durava,
+  // qualsevol amb la clau anon podia posar contrasenya a aquell compte. Ara el
+  // Reset assigna una contrasenya temporal real i el soci entra per aquí mateix.
+  // fem_login ja no retorna 'reset_required'.
 
   if (result.status !== 'ok') {
     errEl.style.display = 'block';
@@ -266,81 +266,13 @@ export async function logout() {
   if (testBanner) testBanner.style.display = _dbMode === 'test' ? 'block' : 'none';
 }
 
-// ═══════════════════════════════════
-// FORCED NEW PASSWORD (member, after admin reset)
-// ═══════════════════════════════════
-let _pendingPasswordUser = null;
-
-export function openNewPasswordModal(user) {
-  _pendingPasswordUser = user;
-  document.getElementById('new-pwd-input').value = '';
-  document.getElementById('new-pwd-repeat-input').value = '';
-  document.getElementById('new-pwd-error').style.display = 'none';
-  openModal('modal-new-password');
-  setTimeout(() => document.getElementById('new-pwd-input').focus(), 100);
-}
-
-export async function saveNewPassword() {
-  const p1 = document.getElementById('new-pwd-input').value;
-  const p2 = document.getElementById('new-pwd-repeat-input').value;
-  const errEl = document.getElementById('new-pwd-error');
-
-  if (!p1 || p1.length < 4) {
-    errEl.textContent = t('new_pwd_short');
-    errEl.style.display = 'block';
-    return;
-  }
-  if (p1 !== p2) {
-    errEl.textContent = t('new_pwd_mismatch');
-    errEl.style.display = 'block';
-    return;
-  }
-  if (!_pendingPasswordUser) return;
-
-  // (2026-07-28) Abans això era un UPDATE directe sobre public.users. Ara no
-  // serviria de res i seria perillós: (a) la RLS només deixa fer UPDATE a
-  // `users` a un admin autenticat, i qui arriba aquí encara no té sessió; i
-  // (b) escriure la contrasenya només a public.users deixaria auth.users amb
-  // l'antiga, o sigui que el soci es quedaria sense poder entrar. La RPC
-  // fem_set_new_password() escriu les dues taules alhora, i només ho accepta
-  // mentre la contrasenya actual sigui buida (el mateix invariant que fa que
-  // fem_login retorni 'reset_required').
-  const { data: ok, error } = await sb.rpc('fem_set_new_password', {
-    p_user_id: _pendingPasswordUser.id,
-    p_new_password: p1,
-  });
-
-  if (error || !ok) {
-    if (error) console.error('fem_set_new_password error', error);
-    errEl.textContent = t('generic_error');
-    errEl.style.display = 'block';
-    return;
-  }
-
-  // Establir la sessió real d'Auth amb la contrasenya NOVA: aquest camí no
-  // passa per handleLogin(), i sense sessió el soci entraria però no podria
-  // votar ni pujar foto (RLS). Best-effort: si falla, no li tanquem la porta.
-  try {
-    await sb.auth.signInWithPassword({
-      email: String(_pendingPasswordUser.email || '').toLowerCase().trim(),
-      password: p1,
-    });
-  } catch (e) {
-    console.warn('No s\'ha pogut obrir sessió d\'Auth després del canvi de contrasenya', e);
-  }
-
-  // Update local state and proceed with login
-  state.currentUser = _pendingPasswordUser;
-  saveSession(_pendingPasswordUser);
-  closeModal('modal-new-password');
-
-  if (_pendingPasswordUser.role === 'admin') {
-    showAdminScreen();
-  } else {
-    showParticipantScreen();
-  }
-  _pendingPasswordUser = null;
-}
+// (2026-07-28, segona tanda) Aquí vivien openNewPasswordModal() i
+// saveNewPassword(), el modal de "crea una nova contrasenya" que tancava el
+// reset per contrasenya buida. S'han retirat amb aquell mecanisme: el Reset de
+// l'admin ara assigna una contrasenya temporal real (fem_admin_reset_password,
+// que escriu public.users i auth.users alhora) i el soci entra pel login
+// normal, així que ja no hi ha cap camí que hi arribi. El modal corresponent
+// també s'ha tret de l'index.html.
 
 // ═══════════════════════════════════
 // REGISTER / UNSUBSCRIBE
@@ -481,7 +413,6 @@ export async function handleUnsubscribe() {
 // Exponer en window las funciones usadas desde onclick del HTML
 window.handleLogin = handleLogin;
 window.logout = logout;
-window.saveNewPassword = saveNewPassword;
 window.showLoginTab = showLoginTab;
 window.showRegisterTab = showRegisterTab;
 window.handleRegister = handleRegister;

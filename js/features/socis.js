@@ -76,17 +76,54 @@ export function resetMemberPassword(userId) {
   openModal('modal-confirm');
 }
 
+// (2026-07-28, segona tanda) Abans això buidava `public.users.password`. Aquell
+// reset no revocava res i obria un forat — comprovat en viu a Test:
+//   · buidar public.users no toca auth.users, i el login valida primer amb
+//     signInWithPassword() → el soci seguia entrant amb la contrasenya VELLA;
+//   · i mentre la contrasenya era buida, qualsevol amb la clau anon pública i
+//     l'email del soci podia posar-n'hi una de nova i entrar-hi.
+// Ara el servidor genera una contrasenya temporal, l'escriu a les DUES taules i
+// tanca les sessions obertes del soci. El mateix canvi és a FEM-Foto; la RPC
+// viu a la BD compartida (sql/2026-07-28_reset_admin_* al repo de FEM-Foto).
 export async function doResetMemberPassword(userId) {
-  // Single UPDATE — only the password field, all other data preserved
-  const { error } = await sb.from('users').update({ password: '' }).eq('id', userId);
-  if (error) {
-    showToast('❌ Error', 'error');
+  const user = state.users.find(u => u.id === userId);
+
+  const { data: tempPassword, error } = await sb.rpc('fem_admin_reset_password', {
+    p_user_id: userId,
+  });
+
+  // La RPC retorna NULL si qui la crida no és admin o si el soci no existeix.
+  if (error || !tempPassword) {
+    if (error) console.error('fem_admin_reset_password error', error);
+    showToast(t('member_reset_error'), 'error');
     return;
   }
-  // Update local state (state.users ja no porta `password`: buidar-lo a la BD
-  // és el que fa que fem_login() retorni 'reset_required' al pròxim accés)
+
   renderMembersTable();
-  showToast(t('member_reset_done'), 'success');
+  openTempPasswordModal(user ? user.name : '', tempPassword);
+}
+
+// La contrasenya temporal es mostra un sol cop, en un modal i no en un toast:
+// l'admin l'ha de poder llegir amb calma i copiar-la per enviar-la al soci.
+export function openTempPasswordModal(memberName, tempPassword) {
+  document.getElementById('temp-pwd-msg').textContent =
+    t('temp_pwd_msg').replace('{name}', memberName);
+  document.getElementById('temp-pwd-value').textContent = tempPassword;
+  const copyBtn = document.getElementById('temp-pwd-copy');
+  if (copyBtn) copyBtn.textContent = t('temp_pwd_copy');
+  openModal('modal-temp-password');
+}
+
+export async function copyTempPassword() {
+  const value = document.getElementById('temp-pwd-value').textContent;
+  const btn   = document.getElementById('temp-pwd-copy');
+  try {
+    await navigator.clipboard.writeText(value);
+    if (btn) btn.textContent = t('temp_pwd_copied');
+  } catch (e) {
+    console.warn('No s\'ha pogut copiar al porta-retalls:', e);
+    showToast(t('temp_pwd_copy_failed'), 'error');
+  }
 }
 
 // ═══════════════════════════════════
@@ -261,6 +298,7 @@ export async function deleteMember(id) {
 window.toggleRole = toggleRole;
 window.inlineEditName = inlineEditName;
 window.resetMemberPassword = resetMemberPassword;
+window.copyTempPassword = copyTempPassword;
 window.deleteMember = deleteMember;
 window.openMemberModal = openMemberModal;
 window.saveMember = saveMember;
