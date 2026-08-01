@@ -105,9 +105,14 @@ módulos por pantalla y por función.
 |---|---|
 | `id`, `name`, `description`, `status`, `created_by` | Identitat del repte (`status`: `active`/`finished`/`inactive`) |
 | `start_date`, `end_date` | Data de creació / de finalització del repte (**no** és calendari de pujada-votació) |
-| `uploads_enabled`, `voting_enabled`, `names_revealed` | Estat efectiu d'avui (el que llegeix la resta de l'app) |
+| `uploads_enabled`, `voting_enabled` | Estat efectiu d'avui (el que llegeix la resta de l'app) |
 | `cal_upload_start`, `cal_upload_end`, `cal_voting_start`, `cal_voting_end` | Finestres de pujada/votació (abans a `reptes_calendari`) |
 | `upload_mode`, `voting_mode` | `calendari` / `obert` / `tancat` per fase (abans a `reptes_calendari`) |
+
+**01/08/2026**: `objectives.names_revealed` i `photo_submissions.revealed` **ja no existeixen** —
+eliminades junt amb la fila `app_settings.ranking_hidden`/`names_revealed`: cap consumidor real
+en cap de les dues apps (FEM-Reptes ni FEM-Foto). Detall complet a
+`sql/2026-08-01_neteja_names_revealed_ranking_hidden.sql`, repositori de FEM-Foto.
 
 `reptes_calendari` **existeix encara a la BD però ja no rep cap lectura ni escriptura** —
 ni el frontend (`js/core/data.js`, `js/features/calendari.js`) ni el cron
