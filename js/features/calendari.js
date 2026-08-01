@@ -23,7 +23,6 @@ import { sb } from '../core/config.js';
 import { t } from '../core/i18n.js';
 import { showToast } from '../ui/toast.js';
 import { getActiveObjectiveId, saveSettings, saveObjectives } from '../core/data.js';
-import { renderRanking } from './ranking.js';
 
 // Fila de calendari d'un repte (per defecte, l'actiu). El nom és històric:
 // funciona per a QUALSEVOL objectiveId, no només per al repte "actiu" global.
@@ -78,26 +77,22 @@ function computeWantFromDates(cal) {
   return {
     wantUpload: inRange(cal.uploadStart, cal.uploadEnd),
     wantVoting: inRange(cal.votingStart, cal.votingEnd),
-    wantReveal: !!(cal.votingEnd && today > cal.votingEnd),
   };
 }
 
 // ── Aplicar l'estat efectiu (mode + dates) d'UN repte, sense esperar el cron ──
-// Recalcula uploads_enabled/voting_enabled/names_revealed del repte segons
-// uploadMode/votingMode i, quan el mode és 'calendari', les dates. Només
-// persisteix si canvia res. Revela noms quan la votació passa a tancada (per
-// qualsevol via: mode 'tancat' manual o data de fi de calendari) — mateix
-// efecte que abans feia el botó "Tancar Votacions".
+// Recalcula uploads_enabled/voting_enabled del repte segons uploadMode/
+// votingMode i, quan el mode és 'calendari', les dates. Només persisteix si
+// canvia res.
 export function applyPhaseModes(objectiveId) {
   const objId = objectiveId || getActiveObjectiveId();
   const cal = getActiveCalendar(objId);
   const obj = state.objectives.find(o => o.id === objId);
   if (!cal || !obj) return false;
 
-  const { wantUpload, wantVoting, wantReveal } = computeWantFromDates(cal);
+  const { wantUpload, wantVoting } = computeWantFromDates(cal);
   const finalUpload = cal.uploadMode === 'obert' ? true : cal.uploadMode === 'tancat' ? false : wantUpload;
   const finalVoting = cal.votingMode === 'obert' ? true : cal.votingMode === 'tancat' ? false : wantVoting;
-  const wasVotingOpen = !!obj.voting_enabled;
 
   // state.settings només té sentit com a mirall de l'ÚNIC repte "actiu"
   // global (state.currentObjective) — participant.js/votacio.js/fotos.js el
@@ -114,17 +109,6 @@ export function applyPhaseModes(objectiveId) {
     obj.voting_enabled = finalVoting;
     if (isCurrentGlobal) state.settings.voting_enabled = finalVoting;
     changed = true;
-  }
-  // Revelar noms: la votació es tanca ARA (per qualsevol via) o, en mode
-  // calendari, la data de fi de votació ja ha passat.
-  const closedNow = wasVotingOpen && !finalVoting;
-  const revealByCalendar = cal.votingMode === 'calendari' && wantReveal;
-  if ((closedNow || revealByCalendar) && !obj.names_revealed) {
-    obj.names_revealed = true;
-    if (isCurrentGlobal) state.settings.namesRevealed = true;
-    changed = true;
-    renderRanking('ranking-current-list', 'ranking-general-list');
-    renderRanking('p-ranking-current-list', 'p-ranking-general-list');
   }
 
   if (changed) {

@@ -75,7 +75,7 @@ export async function switchDbMode(newMode) {
   state.objectives        = [];
   state.photos            = [];
   state.votes             = [];
-  state.settings          = { uploads_enabled: false, voting_enabled: false, namesRevealed: false, rankingHidden: false, force_hide_upload: false, force_hide_vote: false, force_hide_resultats: false, force_hide_classificacio: false };
+  state.settings          = { uploads_enabled: false, voting_enabled: false, force_hide_upload: false, force_hide_vote: false, force_hide_resultats: false, force_hide_classificacio: false };
   state.generalRanking    = {};
   state.currentObjective  = null;
   state.currentUser       = null;

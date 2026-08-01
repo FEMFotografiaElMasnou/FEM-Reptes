@@ -15,7 +15,7 @@ export const state = {
   photos:          [],          // not yet published
   publishedPhotos: [],
   votes:           [],          // raw vote rows from sheet
-  settings:        { uploads_enabled: false, voting_enabled: false, namesRevealed: false, rankingHidden: false, force_hide_upload: false, force_hide_vote: false, force_hide_resultats: false, force_hide_classificacio: false },
+  settings:        { uploads_enabled: false, voting_enabled: false, force_hide_upload: false, force_hide_vote: false, force_hide_resultats: false, force_hide_classificacio: false },
   generalRanking:  {},          // { odorI : { odorScore: 0, participations: 0 }, ... }
   selectedPhotos:  new Set(),
   selectMode:      false,

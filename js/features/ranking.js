@@ -1,7 +1,7 @@
 // ═══════════════════════════════════
 // RANKING — cálculo client-side y render
 // ═══════════════════════════════════
-import { state, actingAsAdmin } from '../core/state.js';
+import { state } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { getActivePublishedPhotos, getDisplayName } from '../core/data.js';
 import { openFullscreen } from '../ui/lightbox.js';
@@ -281,15 +281,12 @@ export function computeGeneralRanking() {
 
 export function renderRanking(currentListId, generalListId) {
   const rankNums = ['gold','silver','bronze'];
-  const isAdmin = actingAsAdmin();
 
   // Current
   const ranked   = computeCurrentRanking();
   const currentEl = document.getElementById(currentListId);
   if (currentEl) {
-    if (!isAdmin && !state.settings.namesRevealed) {
-      currentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><p>${t('ranking_locked_msg')}</p></div>`;
-    } else if (ranked.length === 0) {
+    if (ranked.length === 0) {
       currentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><p>${t('no_data_voting')}</p></div>`;
     } else {
       currentEl.innerHTML = ranked.map(({ photo, score }, idx) => `
@@ -306,29 +303,23 @@ export function renderRanking(currentListId, generalListId) {
     }
   }
 
-  // General — ocultar a participantes si rankingHidden está activo
   const general   = computeGeneralRanking();
   const generalEl = document.getElementById(generalListId);
   if (generalEl) {
-    // Si no es admin y el ranking está oculto, mostrar mensaje
-    if (!isAdmin && state.settings.rankingHidden) {
-      generalEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><p>${t('general_ranking_hidden_msg')}</p></div>`;
+    const active = general.filter(g => g.participations > 0);
+    if (active.length === 0) {
+      generalEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>${t('no_participations')}</p></div>`;
     } else {
-      const active = general.filter(g => g.participations > 0);
-      if (active.length === 0) {
-        generalEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🏅</div><p>${t('no_participations')}</p></div>`;
-      } else {
-        generalEl.innerHTML = active.map(({ user, participations, totalScore }, idx) => `
-          <div class="rank-item">
-            <div class="rank-num ${rankNums[idx]||''}">${idx+1}</div>
-            <div class="rank-info">
-              <div class="rank-name">${user.name}</div>
-              <div class="rank-meta">${participations} ${t('participations')}</div>
-            </div>
-            <div class="rank-score">${Math.trunc(totalScore)}</div>
+      generalEl.innerHTML = active.map(({ user, participations, totalScore }, idx) => `
+        <div class="rank-item">
+          <div class="rank-num ${rankNums[idx]||''}">${idx+1}</div>
+          <div class="rank-info">
+            <div class="rank-name">${user.name}</div>
+            <div class="rank-meta">${participations} ${t('participations')}</div>
           </div>
-        `).join('');
-      }
+          <div class="rank-score">${Math.trunc(totalScore)}</div>
+        </div>
+      `).join('');
     }
   }
 }

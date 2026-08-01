@@ -177,8 +177,6 @@ export function startAutoRefresh() {
       const newSig = [
         getSetting('uploads_enabled'),
         getSetting('voting_enabled'),
-        getSetting('names_revealed'),
-        getSetting('ranking_hidden'),
         getSetting('force_hide_upload'),
         getSetting('force_hide_vote'),
         getSetting('force_hide_resultats'),
@@ -203,8 +201,6 @@ function _buildSignature() {
   return [
     String(state.settings.uploads_enabled),
     String(state.settings.voting_enabled),
-    String(state.settings.namesRevealed),
-    String(state.settings.rankingHidden),
     String(state.settings.force_hide_upload),
     String(state.settings.force_hide_vote),
     String(state.settings.force_hide_resultats),

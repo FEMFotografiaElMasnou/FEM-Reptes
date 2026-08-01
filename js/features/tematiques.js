@@ -166,7 +166,6 @@ export async function finalizeObjective(id) {
       // encara el llegeixen; sense repte actiu, tot false és correcte)
       state.settings.uploads_enabled = false;
       state.settings.voting_enabled  = false;
-      state.settings.namesRevealed   = false;
       await saveSettings(); // Esto también guarda el generalRanking
       // FASE 4/5: els vells checkboxes globals #toggle-upload/#toggle-voting
       // ja no existeixen (retirats amb la card "Controls" del Panell de

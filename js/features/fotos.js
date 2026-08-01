@@ -464,7 +464,6 @@ export async function uploadPhoto() {
       original_url: data.secure_url,
       file_size:    String(fileToUpload.size || ''),
       published:    false,
-      revealed:     false,
       submitted_at: new Date().toISOString(),
       caption:      caption,
     };
